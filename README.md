@@ -54,13 +54,15 @@ sbcl --load web-server.lisp
 
 ```
 connect4-lisp/
-├── src/                    # Original Lisp files (UNCHANGED)
-│   ├── minimax.lisp        # Minimax algorithm with α-β pruning
-│   ├── connect-4.lisp      # Game board, moves, win detection
-│   └── heuristic.lisp      # AI heuristic evaluation
+├── src/                     # Original Lisp files (UNCHANGED)
+│   ├── minimax.lisp         # Minimax algorithm with α-β pruning
+│   ├── connect-4.lisp       # Game board, moves, win detection
+│   └── heuristic.lisp       # AI heuristic evaluation
 ├── static/
-│   └── index.html          # Web UI (single-file HTML/CSS/JS)
-├── web-server.lisp         # HTTP API layer (Hunchentoot)
+│   └── index.html           # Web UI (single-file HTML/CSS/JS)
+├── images/
+│   └── screenshot.jpg       # Game screenshot
+├── web-server.lisp          # HTTP API layer (Hunchentoot)
 ├── Dockerfile
 ├── docker-compose.yml
 └── README.md
