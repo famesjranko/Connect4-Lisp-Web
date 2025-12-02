@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connect 4 - Lisp AI</title>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #0a0a0f;
+            --bg-board: #1a1a2e;
+            --blue-frame: #0047ab;
+            --blue-glow: #4d94ff;
+            --red: #ff3860;
+            --red-glow: #ff6b6b;
+            --yellow: #ffd93d;
+            --yellow-glow: #ffe066;
+            --text: #e0e0e0;
+            --text-dim: #666;
+            --cell-bg: #0d1117;
+            --win-glow: #00ff88;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Space Mono', monospace;
+            background: var(--bg-dark);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: var(--text);
+            padding: 20px;
+            background-image: 
+                radial-gradient(ellipse at top, #1a1a3e 0%, transparent 50%),
+                radial-gradient(ellipse at bottom, #0a0a1f 0%, transparent 50%);
+        }
+
+        h1 {
+            font-family: 'Press Start 2P', cursive;
+            font-size: clamp(1.2rem, 4vw, 2rem);
+            margin-bottom: 0.5rem;
+            background: linear-gradient(135deg, var(--red) 0%, var(--yellow) 50%, var(--red) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-shadow: 0 0 30px rgba(255, 56, 96, 0.5);
+            animation: glow 2s ease-in-out infinite alternate;
+        }
+
+        @keyframes glow {
+            from { filter: drop-shadow(0 0 10px var(--red)); }
+            to { filter: drop-shadow(0 0 20px var(--yellow)); }
+        }
+
+        .subtitle {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            margin-bottom: 1.5rem;
+            letter-spacing: 2px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        button {
+            font-family: 'Press Start 2P', cursive;
+            font-size: 0.6rem;
+            padding: 12px 20px;
+            border: 2px solid var(--blue-glow);
+            background: transparent;
+            color: var(--blue-glow);
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+        }
+
+        button:hover {
+            background: var(--blue-glow);
+            color: var(--bg-dark);
+            box-shadow: 0 0 20px var(--blue-glow);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .depth-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 1rem;
+        }
+
+        .depth-control label {
+            font-size: 0.7rem;
+            color: var(--text-dim);
+        }
+
+        .depth-control select {
+            font-family: 'Space Mono', monospace;
+            font-size: 0.8rem;
+            padding: 8px 12px;
+            background: var(--bg-board);
+            border: 1px solid var(--blue-glow);
+            color: var(--text);
+            cursor: pointer;
+        }
+
+        .board-container {
+            perspective: 1000px;
+        }
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 8px;
+            padding: 20px;
+            background: linear-gradient(145deg, #0047ab, #003380);
+            border-radius: 16px;
+            box-shadow: 
+                0 10px 40px rgba(0, 71, 171, 0.4),
+                inset 0 2px 0 rgba(255,255,255,0.1),
+                inset 0 -2px 0 rgba(0,0,0,0.3);
+            transform: rotateX(5deg);
+        }
+
+        .column {
+            display: flex;
+            flex-direction: column-reverse;
+            gap: 8px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .column:hover:not(.disabled) {
+            transform: translateY(-5px);
+        }
+
+        .column.disabled {
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+
+        .cell {
+            width: clamp(40px, 10vw, 60px);
+            height: clamp(40px, 10vw, 60px);
+            background: var(--cell-bg);
+            border-radius: 50%;
+            box-shadow: 
+                inset 0 4px 8px rgba(0,0,0,0.6),
+                inset 0 -2px 4px rgba(255,255,255,0.05);
+            transition: all 0.3s;
+            position: relative;
+        }
+
+        .cell.player {
+            background: radial-gradient(circle at 30% 30%, var(--red-glow), var(--red) 60%, #cc2040);
+            box-shadow: 
+                0 0 20px var(--red),
+                inset 0 -4px 8px rgba(0,0,0,0.3),
+                inset 0 4px 8px rgba(255,255,255,0.2);
+        }
+
+        .cell.ai {
+            background: radial-gradient(circle at 30% 30%, var(--yellow-glow), var(--yellow) 60%, #e6c200);
+            box-shadow: 
+                0 0 20px var(--yellow),
+                inset 0 -4px 8px rgba(0,0,0,0.3),
+                inset 0 4px 8px rgba(255,255,255,0.3);
+        }
+
+        .cell.winning {
+            animation: pulse-win 0.5s ease-in-out infinite alternate;
+        }
+
+        @keyframes pulse-win {
+            from { 
+                transform: scale(1);
+                box-shadow: 0 0 20px var(--win-glow);
+            }
+            to { 
+                transform: scale(1.05);
+                box-shadow: 0 0 40px var(--win-glow), 0 0 60px var(--win-glow);
+            }
+        }
+
+        @keyframes drop {
+            0% { 
+                transform: translateY(-400px);
+                opacity: 0;
+            }
+            60% { 
+                transform: translateY(10px);
+            }
+            80% { 
+                transform: translateY(-5px);
+            }
+            100% { 
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .cell.dropping {
+            animation: drop 0.5s ease-out;
+        }
+
+        .column-indicator {
+            text-align: center;
+            font-family: 'Press Start 2P', cursive;
+            font-size: 0.5rem;
+            color: var(--text-dim);
+            padding-top: 10px;
+        }
+
+        .status {
+            margin-top: 1.5rem;
+            font-family: 'Press Start 2P', cursive;
+            font-size: 0.7rem;
+            min-height: 2em;
+            text-align: center;
+            transition: all 0.3s;
+        }
+
+        .status.win {
+            color: var(--win-glow);
+            text-shadow: 0 0 20px var(--win-glow);
+        }
+
+        .status.lose {
+            color: var(--red);
+            text-shadow: 0 0 20px var(--red);
+        }
+
+        .status.thinking {
+            color: var(--yellow);
+        }
+
+        .stats {
+            margin-top: 1rem;
+            font-size: 0.7rem;
+            color: var(--text-dim);
+            text-align: center;
+        }
+
+        .legend {
+            display: flex;
+            gap: 20px;
+            margin-top: 1rem;
+            font-size: 0.7rem;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .legend-dot {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+        }
+
+        .legend-dot.player {
+            background: var(--red);
+        }
+
+        .legend-dot.ai {
+            background: var(--yellow);
+        }
+
+        footer {
+            margin-top: 2rem;
+            font-size: 0.6rem;
+            color: var(--text-dim);
+            text-align: center;
+        }
+
+        footer a {
+            color: var(--blue-glow);
+            text-decoration: none;
+        }
+
+        /* Loading overlay */
+        .loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+
+        .loading.active {
+            display: flex;
+        }
+
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid var(--bg-board);
+            border-top-color: var(--yellow);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Responsive */
+        @media (max-width: 500px) {
+            .board {
+                padding: 12px;
+                gap: 5px;
+            }
+            .column {
+                gap: 5px;
+            }
+            .controls {
+                flex-direction: column;
+            }
+            button {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>CONNECT 4</h1>
+    <p class="subtitle">Powered by Lisp Heuristic AI</p>
+
+    <div class="controls">
+        <button id="new-game">New Game</button>
+        <button id="new-game-ai">AI First</button>
+    </div>
+
+    <div class="depth-control">
+        <label for="depth">AI Depth:</label>
+        <select id="depth">
+            <option value="1">1 (Easy)</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4" selected>4 (Default)</option>
+            <option value="5">5</option>
+            <option value="6">6 (Hard)</option>
+        </select>
+    </div>
+
+    <div class="board-container">
+        <div class="board" id="board"></div>
+        <div style="display: flex; justify-content: space-around; padding: 0 20px;">
+            <div class="column-indicator">0</div>
+            <div class="column-indicator">1</div>
+            <div class="column-indicator">2</div>
+            <div class="column-indicator">3</div>
+            <div class="column-indicator">4</div>
+            <div class="column-indicator">5</div>
+            <div class="column-indicator">6</div>
+        </div>
+    </div>
+
+    <div class="status" id="status">Click "New Game" to start!</div>
+    <div class="stats" id="stats"></div>
+
+    <div class="legend">
+        <div class="legend-item">
+            <div class="legend-dot player"></div>
+            <span>You (X)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-dot ai"></div>
+            <span>AI (O)</span>
+        </div>
+    </div>
+
+    <footer>
+        <p>Original Lisp engine by Andrew McDonald</p>
+        <p>Minimax with α-β pruning • Heuristic evaluation</p>
+    </footer>
+
+    <div class="loading" id="loading">
+        <div class="spinner"></div>
+    </div>
+
+    <script>
+        let gameId = null;
+        let gameActive = false;
+
+        const board = document.getElementById('board');
+        const status = document.getElementById('status');
+        const stats = document.getElementById('stats');
+        const loading = document.getElementById('loading');
+        const depthSelect = document.getElementById('depth');
+
+        // Initialize empty board
+        function initBoard() {
+            board.innerHTML = '';
+            for (let col = 0; col < 7; col++) {
+                const column = document.createElement('div');
+                column.className = 'column disabled';
+                column.dataset.col = col;
+                
+                for (let row = 0; row < 6; row++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.dataset.row = row;
+                    cell.dataset.col = col;
+                    column.appendChild(cell);
+                }
+                
+                column.addEventListener('click', () => makeMove(col));
+                board.appendChild(column);
+            }
+        }
+
+        // Update board from server response
+        function updateBoard(boardData, aiMove = null) {
+            const columns = board.querySelectorAll('.column');
+            
+            columns.forEach((column, colIdx) => {
+                const cells = column.querySelectorAll('.cell');
+                const colData = boardData[colIdx];
+                
+                cells.forEach((cell, rowIdx) => {
+                    const value = colData[rowIdx];
+                    const wasPlayer = cell.classList.contains('player');
+                    const wasAi = cell.classList.contains('ai');
+                    const wasEmpty = !wasPlayer && !wasAi;
+                    
+                    // Only update if the cell state changed
+                    if (value === 'X' && !wasPlayer) {
+                        cell.className = 'cell player';
+                        if (wasEmpty) {
+                            cell.classList.add('dropping');
+                            setTimeout(() => cell.classList.remove('dropping'), 500);
+                        }
+                    } else if (value === 'O' && !wasAi) {
+                        cell.className = 'cell ai';
+                        if (wasEmpty) {
+                            cell.classList.add('dropping');
+                            setTimeout(() => cell.classList.remove('dropping'), 500);
+                        }
+                    } else if (value === null && (wasPlayer || wasAi)) {
+                        cell.className = 'cell';
+                    }
+                    // If no change, leave the cell as-is
+                });
+            });
+        }
+
+        // Enable/disable column clicks
+        function setColumnsEnabled(enabled) {
+            const columns = board.querySelectorAll('.column');
+            columns.forEach(col => {
+                if (enabled) {
+                    col.classList.remove('disabled');
+                } else {
+                    col.classList.add('disabled');
+                }
+            });
+        }
+
+        // API calls
+        // Clear all pieces from the board
+        function clearBoard() {
+            const cells = board.querySelectorAll('.cell');
+            cells.forEach(cell => {
+                cell.className = 'cell';
+            });
+        }
+
+        async function newGame(aiFirst = false) {
+            loading.classList.add('active');
+            clearBoard(); // Reset the board first
+            try {
+                const endpoint = aiFirst ? '/api/new-game-ai-first' : '/api/new-game';
+                const response = await fetch(endpoint);
+                const data = await response.json();
+                
+                console.log('New game response:', data);
+                
+                // Handle both camelCase and kebab-case keys
+                gameId = data.gameId || data['game-id'];
+                gameActive = true;
+                
+                console.log('Game ID set to:', gameId);
+                
+                const boardData = data.board;
+                const aiMove = data.aiMove || data['ai-move'];
+                const message = data.message;
+                
+                updateBoard(boardData, aiMove);
+                setColumnsEnabled(true);
+                status.textContent = message;
+                status.className = 'status';
+                stats.textContent = '';
+            } catch (error) {
+                status.textContent = 'Error starting game';
+                console.error('New game error:', error);
+            }
+            loading.classList.remove('active');
+        }
+
+        async function makeMove(column) {
+            console.log('makeMove called, gameId:', gameId, 'gameActive:', gameActive);
+            
+            if (!gameActive || !gameId) {
+                console.log('Move blocked - no active game');
+                status.textContent = 'Click "New Game" to start!';
+                return;
+            }
+            
+            // Check if column is full
+            const col = board.querySelectorAll('.column')[column];
+            const cells = col.querySelectorAll('.cell');
+            const topCell = cells[5];
+            if (topCell.classList.contains('player') || topCell.classList.contains('ai')) {
+                return; // Column is full
+            }
+
+            setColumnsEnabled(false);
+            status.textContent = 'AI is thinking...';
+            status.className = 'status thinking';
+            loading.classList.add('active');
+            
+            try {
+                const url = `/api/move?game_id=${gameId}&column=${column}`;
+                console.log('Making move, URL:', url);
+                
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                console.log('Move response:', data);
+                
+                if (data.error) {
+                    status.textContent = data.error;
+                    setColumnsEnabled(true);
+                } else {
+                    const aiMove = data.aiMove || data['ai-move'];
+                    const evaluations = data.evaluations;
+                    const gameStatus = data.status;
+                    const message = data.message;
+                    
+                    updateBoard(data.board, aiMove);
+                    status.textContent = message;
+                    
+                    if (evaluations) {
+                        stats.textContent = `Positions evaluated: ${evaluations.toLocaleString()}`;
+                    }
+                    
+                    if (gameStatus === 'player_wins') {
+                        status.className = 'status win';
+                        gameActive = false;
+                    } else if (gameStatus === 'ai_wins') {
+                        status.className = 'status lose';
+                        gameActive = false;
+                    } else if (gameStatus === 'draw') {
+                        status.className = 'status';
+                        gameActive = false;
+                    } else {
+                        status.className = 'status';
+                        setColumnsEnabled(true);
+                    }
+                }
+            } catch (error) {
+                status.textContent = 'Error making move';
+                console.error(error);
+                setColumnsEnabled(true);
+            }
+            loading.classList.remove('active');
+        }
+
+        async function setDepth(depth) {
+            try {
+                await fetch(`/api/set-depth?depth=${depth}`);
+            } catch (error) {
+                console.error('Error setting depth:', error);
+            }
+        }
+
+        // Event listeners
+        document.getElementById('new-game').addEventListener('click', () => newGame(false));
+        document.getElementById('new-game-ai').addEventListener('click', () => newGame(true));
+        depthSelect.addEventListener('change', (e) => setDepth(e.target.value));
+
+        // Initialize
+        initBoard();
+    </script>
+</body>
+</html>
