@@ -2,7 +2,7 @@
 
 A web interface for the Connect-4 Heuristic AI, powered by Common Lisp.
 
-![Connect 4 Screenshot](images/screenshot.jpg)
+![Connect 4 Screenshot](images/screenshot-1.jpg)
 
 ## Overview
 
