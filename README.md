@@ -2,8 +2,6 @@
 
 A web interface for the Connect-4 Heuristic AI, powered by Common Lisp.
 
-**Stateless architecture** - horizontally scalable for Railway, Cloud Run, Kubernetes, etc.
-
 ![Connect 4 Screenshot](images/screenshot-1.jpg)
 
 ## Overview
