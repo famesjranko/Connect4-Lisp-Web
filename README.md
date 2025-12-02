@@ -1,7 +1,5 @@
 # Connect-4 Lisp Heuristic Player - Web Dashboard
 
-A web interface for the Connect-4 Heuristic AI, powered by Common Lisp.
-
 <img src="images/screenshot-1.jpg" alt="Connect 4 Screenshot" width="600">
 
 ## Overview
