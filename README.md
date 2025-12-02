@@ -3,7 +3,7 @@
 A web interface for the Connect-4 Heuristic AI, powered by Common Lisp.
 
 <p align="center">
-  <img src="images/screenshot-1.jpg" alt="Connect 4 Screenshot" width="400">
+  <img src="images/screenshot-1.jpg" alt="Connect 4 Screenshot" width="500">
 </p>
 
 ## Overview
