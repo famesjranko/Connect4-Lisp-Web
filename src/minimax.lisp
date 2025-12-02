@@ -34,6 +34,10 @@
    "tictactoe.lisp".
 ----------------------------------------------------------------------------|#
 
+;;; Forward declarations to suppress compiler warnings
+(declaim (ftype function minimax-a-b-1))
+(defvar *static-evaluations* 0)  ; Used for counting evaluations
+
 ;; Function MINIMAX performs minimax search from a given position (pos),
 ;; to a given search ply (depth), for a given player (player). It returns
 ;; a list of board positions representing what it sees as the best moves for
