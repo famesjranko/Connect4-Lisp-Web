@@ -195,6 +195,36 @@
                                       ((equal status "draw") "Draw!")
                                       (t "Your turn!")))))))))))))))
 
+;;; Debug endpoint - evaluate board without making a move
+(hunchentoot:define-easy-handler (api-debug :uri "/api/debug") (depth)
+  (setf (hunchentoot:content-type*) "application/json")
+  (let* ((body (hunchentoot:raw-post-data :force-text t))
+         (json-data (handler-case
+                        (when (and body (> (length body) 0))
+                          (cl-json:decode-json-from-string body))
+                      (error () nil)))
+         (board (json-to-board (cdr (assoc :board json-data))))
+         (d (or (and depth (parse-integer depth :junk-allowed t)) +default-depth+)))
+    (cond
+      ((or (null board) (not (valid-board-p board)))
+       (setf (hunchentoot:return-code*) 400)
+       (cl-json:encode-json-to-string '((:error . "Invalid or missing board state"))))
+      (t
+       (let ((*max-depth* d)
+             (*static-evaluations* 0))
+         (let* ((ai-scores (evaluate-all-moves board 'o))
+                (immediate-win (find-immediate-win board 'o))
+                (immediate-block (find-immediate-block board 'o))
+                (best-col (first (first (sort (remove-if-not #'second (copy-list ai-scores))
+                                              #'> :key #'second)))))
+           (cl-json:encode-json-to-string
+            `((:depth . ,d)
+              (:ai-scores . ,ai-scores)
+              (:best-col . ,best-col)
+              (:evaluations . ,*static-evaluations*)
+              (:immediate-win . ,(when immediate-win (find-ai-move-column board immediate-win)))
+              (:immediate-block . ,(when immediate-block (find-ai-move-column board immediate-block)))))))))))
+
 ;;; Server startup
 (defun start-server (&optional (port 8080))
   (let ((server (make-instance 'hunchentoot:easy-acceptor 
