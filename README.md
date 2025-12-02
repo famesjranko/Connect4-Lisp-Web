@@ -6,7 +6,7 @@ A web interface for the Connect-4 Heuristic AI, powered by Common Lisp.
 
 ## Overview
 
-This project wraps the original [Connect4-Heuristic-Player](https://github.com/famesjranko/Connect4-Heuristic-Player) Lisp implementation with a modern web interface. The original game logic, minimax algorithm, and heuristic evaluation remain **completely unchanged** - we've simply added an HTTP API layer on top.
+This project adds a modern web interface to my original [Connect4-Heuristic-Player](https://github.com/famesjranko/Connect4-Heuristic-Player) Lisp implementation from university. The original game logic, minimax algorithm, and heuristic evaluation remain **completely unchanged** - I've simply added an HTTP API layer on top.
 
 ### Architecture
 
@@ -239,8 +239,8 @@ The heuristic evaluates:
 - Cached DOM references in frontend
 - Input validation on all endpoints
 
-## Original Project
+## Credits
 
-The Lisp game engine is from [famesjranko/Connect4-Heuristic-Player](https://github.com/famesjranko/Connect4-Heuristic-Player) by Andrew McDonald.
+Original Lisp game engine from my university project: [Connect4-Heuristic-Player](https://github.com/famesjranko/Connect4-Heuristic-Player)
 
-The minimax implementation is based on code from "Artificial Intelligence" by Elaine Rich and Kevin Knight (McGraw Hill, 1991).
+Minimax algorithm based on code from *Artificial Intelligence* by Elaine Rich and Kevin Knight (McGraw Hill, 1991).
