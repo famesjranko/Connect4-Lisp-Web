@@ -189,8 +189,17 @@
         }
 
         .settings-row.locked {
-            opacity: 0.3;
             pointer-events: none;
+        }
+        .settings-row.locked .setting-group {
+            opacity: 0.3;
+        }
+        .settings-row.locked .debug-check {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .settings-row.locked .debug-check input {
+            pointer-events: auto;
         }
 
         .settings-row::before {
@@ -487,7 +496,6 @@
         }
         .debug-check:hover { color: var(--text); }
         .debug-check input { cursor: pointer; }
-        .settings-row.locked .debug-check { opacity: 1; pointer-events: auto; }
 
         .debug-panel {
             display: none;

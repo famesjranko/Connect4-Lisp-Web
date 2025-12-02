@@ -162,8 +162,17 @@
         }
 
         .settings.locked {
-            opacity: 0.5;
             pointer-events: none;
+        }
+        .settings.locked .setting {
+            opacity: 0.5;
+        }
+        .settings.locked .debug-check {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .settings.locked .debug-check input {
+            pointer-events: auto;
         }
 
         .setting {
@@ -418,7 +427,6 @@
         }
         .debug-check:hover { color: var(--text); }
         .debug-check input { cursor: pointer; }
-        .settings-row.locked .debug-check { opacity: 1; pointer-events: auto; }
 
         .debug-panel {
             display: none;
