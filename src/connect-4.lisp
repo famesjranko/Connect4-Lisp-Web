@@ -1,3 +1,7 @@
+;;; Forward declarations to suppress compiler warnings
+(declaim (ftype function check-for-win check-line not-drawn? get-next-blank movegen-helper))
+(defvar *all-c4-lines* nil)  ; Forward declaration - defined later in file
+
 (defparameter *empty-board*
   '((nil nil nil nil nil nil)
     (nil nil nil nil nil nil)
@@ -16,6 +20,7 @@
 ;  (eq (nth move pos) nil))
 
 (defun legal-move? (board player move)
+  (declare (ignore player))
   (when (member move '(0 1 2 3 4 5 6))
     (get-next-blank (nth move board))))
 

@@ -6,6 +6,16 @@
 ;;;; COMMON LISP IMPLEMENTATION OF HEURISTIC FOR CONNECT-4
 ;;;; =====================================================
 
+;;; Forward declarations to suppress compiler warnings
+(declaim (ftype function heuristic board-value strategy line-score sum
+                imminent-threat? playable-positions best-strategy?
+                preferred-positions strategy-eval? preferred-position-score))
+(defvar *default-board-values* nil)
+(defvar *strategy-a* nil)
+(defvar *strategy-b* nil)
+(defvar *board-positions-template* nil)
+(defvar *strategy-board-template* nil)
+
 ;;; =========
 ;;; HEURISTIC
 ;;; =========

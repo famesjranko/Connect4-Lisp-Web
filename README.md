@@ -2,6 +2,8 @@
 
 A web interface for the Connect-4 Heuristic AI, powered by Common Lisp.
 
+**Stateless architecture** - horizontally scalable for Railway, Cloud Run, Kubernetes, etc.
+
 ![Connect 4 Screenshot](images/screenshot-1.jpg)
 
 ## Overview
@@ -11,22 +13,33 @@ This project wraps the original [Connect4-Heuristic-Player](https://github.com/f
 ### Architecture
 
 ```
-┌─────────────────────┐
-│   Browser (HTML/JS) │
-└──────────┬──────────┘
-           │ HTTP/JSON
-┌──────────▼──────────┐
-│   Hunchentoot       │  ← Web server layer (web-server.lisp)
-│   (CL HTTP Server)  │
-└──────────┬──────────┘
-           │ Function calls
-┌──────────▼──────────┐
-│  Original Lisp Code │
-│  ├─ minimax.lisp    │  ← Minimax with α-β pruning  
-│  ├─ connect-4.lisp  │  ← Game logic & board
-│  └─ heuristic.lisp  │  ← AI evaluation function
-└─────────────────────┘
+┌─────────────────────────────┐
+│   Browser (stores board)    │  ← Game state lives here
+└──────────────┬──────────────┘
+               │ POST {board: [...]}
+┌──────────────▼──────────────┐
+│      Load Balancer          │
+├─────────┬─────────┬─────────┤
+│ Instance│ Instance│ Instance│  ← Any instance handles any request
+└────┬────┴────┬────┴────┬────┘
+     │         │         │
+┌────▼─────────▼─────────▼────┐
+│     Original Lisp Code      │
+│  ├─ minimax.lisp            │  ← Minimax with α-β pruning  
+│  ├─ connect-4.lisp          │  ← Game logic & board
+│  └─ heuristic.lisp          │  ← AI evaluation function
+└─────────────────────────────┘
 ```
+
+### Stateless Design
+
+Unlike traditional session-based game servers:
+- **Client stores board state** in JavaScript
+- **Each request includes full board state** via POST body
+- **No game IDs or server-side storage**
+- **Any instance can handle any request**
+
+This enables true horizontal scaling without sticky sessions.
 
 ## Quick Start
 
@@ -43,11 +56,27 @@ docker run -p 8080:8080 connect4-lisp
 
 Open http://localhost:8080 in your browser.
 
-### Environment Variables
+### Docker Compose with Replicas
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `LISP_AI_DEPTH` | 4 | Default AI search depth (1-6) |
+```yaml
+version: '3.8'
+services:
+  connect4:
+    build: .
+    deploy:
+      replicas: 3
+    ports:
+      - "8080:8080"
+```
+
+### Cloud Deployment (Railway / Render / Fly.io / Cloud Run)
+
+1. Push to GitHub
+2. Connect repo to platform
+3. Deploy - auto-detects Dockerfile
+4. Scale to multiple instances ✓
+
+No sticky sessions or shared state required.
 
 ### Running Locally (requires SBCL)
 
@@ -56,15 +85,20 @@ Open http://localhost:8080 in your browser.
 sbcl --load web-server.lisp
 ```
 
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | 8080 | Server port |
+
 ## Features
 
-- **Theme picker** - Choose between Modern (clean minimal) and Arcade (retro glow) themes
+- **Horizontally scalable** - no server-side session state
+- **Theme picker** - 8 themes from minimal to retro arcade
 - **Keyboard support**: Press 1-7 to drop pieces, arrow keys to select, Enter to confirm
-- **Adjustable AI difficulty** (depth 1-6)
+- **Adjustable AI difficulty** (depth 1-10)
+- **Debug mode** - see AI's move analysis and scores
 - **Winning line highlighting** when game ends
-- **Per-game settings** - multiple concurrent games supported
-- **Automatic cleanup** of abandoned games (1 hour timeout)
-- **Thread-safe** game state management
 - **Non-root Docker** container for security
 - **Theme persistence** - your preference is saved to localStorage
 
@@ -117,20 +151,41 @@ connect4-lisp/
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/new-game` | GET | Start new game (player first) |
-| `/api/new-game-ai-first` | GET | Start new game (AI first) |
-| `/api/move?game_id=X&column=N` | GET | Make a move (column 0-6) |
-| `/api/set-depth?game_id=X&depth=N` | GET | Set AI depth for game (1-6) |
-| `/api/health` | GET | Health check with stats |
+| `/api/new-game` | GET | Get empty board (player first) |
+| `/api/new-game-ai-first?depth=N` | GET | Get board with AI's first move |
+| `/api/move?column=N&depth=D` | POST | Make a move (board in POST body) |
+| `/api/debug?depth=N` | POST | Evaluate board without moving |
+| `/api/health` | GET | Health check |
 
-### Example Response
+### Request Format
+
+```javascript
+// POST /api/move?column=3&depth=4
+// Content-Type: application/json
+{
+  "board": [
+    [null, null, null, null, null, null],  // Column 0 (bottom to top)
+    [null, null, null, null, null, null],  // Column 1
+    [null, null, null, null, null, null],  // Column 2
+    ["X", null, null, null, null, null],   // Column 3 - player piece at bottom
+    ["O", null, null, null, null, null],   // Column 4 - AI piece at bottom
+    [null, null, null, null, null, null],  // Column 5
+    [null, null, null, null, null, null]   // Column 6
+  ]
+}
+```
+
+### Response Format
 
 ```json
 {
   "board": [[null,null,null,null,null,null], ...],
   "status": "ongoing",
   "aiMove": 3,
+  "aiScores": [[0, 12], [1, 8], [2, 15], ...],
   "evaluations": 1234,
+  "immediateWin": null,
+  "immediateBlock": 2,
   "winningCells": [[3,0], [3,1], [3,2], [3,3]],
   "message": "Your turn"
 }
@@ -141,9 +196,7 @@ connect4-lisp/
 ```json
 {
   "status": "ok",
-  "activeGames": 5,
-  "uptimeSeconds": 3600,
-  "defaultDepth": 4
+  "version": "stateless"
 }
 ```
 
@@ -154,6 +207,7 @@ The AI uses minimax with alpha-beta pruning and a custom heuristic. You can adju
 - **Depth 1-2**: Easy (fast, not very strategic)
 - **Depth 3-4**: Medium (good balance, default is 4)
 - **Depth 5-6**: Hard (slower, very strategic)
+- **Depth 7+**: Very hard (may be slow on complex boards)
 
 The heuristic evaluates:
 - **Positional value**: Center columns weighted higher
@@ -171,30 +225,24 @@ The heuristic evaluates:
 - **Enter/Space**: Drop piece in selected column
 - **N**: Start new game
 
-## Original Project
-
-The Lisp game engine is from [famesjranko/Connect4-Heuristic-Player](https://github.com/famesjranko/Connect4-Heuristic-Player) by Andrew McDonald.
-
-The minimax implementation is based on code from "Artificial Intelligence" by Elaine Rich and Kevin Knight (McGraw Hill, 1991).
-
 ## Technical Details
 
 - **Lisp Implementation**: SBCL (Steel Bank Common Lisp)
 - **Web Server**: Hunchentoot
 - **JSON Handling**: cl-json
-- **Threading**: bordeaux-threads
 - **Frontend**: Vanilla HTML/CSS/JS (no frameworks)
 - **Container**: Debian Bookworm slim base (non-root)
 
 ## Security & Performance
 
-- Thread-safe game state with locks
-- Automatic game cleanup (1 hour expiry)
-- High-entropy game IDs
+- Stateless design eliminates session-related vulnerabilities
+- No server-side memory accumulation
 - Non-root container execution
 - Cached DOM references in frontend
-- Per-game depth settings (concurrent games don't affect each other)
+- Input validation on all endpoints
 
-## License
+## Original Project
 
-Original Lisp code may be freely copied and used for educational or research purposes.
+The Lisp game engine is from [famesjranko/Connect4-Heuristic-Player](https://github.com/famesjranko/Connect4-Heuristic-Player) by Andrew McDonald.
+
+The minimax implementation is based on code from "Artificial Intelligence" by Elaine Rich and Kevin Knight (McGraw Hill, 1991).

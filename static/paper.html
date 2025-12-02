@@ -154,13 +154,6 @@
         .settings-row.locked .setting-group {
             opacity: 0.4;
         }
-        .settings-row.locked .debug-check {
-            opacity: 1;
-            pointer-events: auto;
-        }
-        .settings-row.locked .debug-check input {
-            pointer-events: auto;
-        }
 
         .setting-group {
             display: flex;
@@ -422,6 +415,8 @@
             margin-left: 16px;
         }
         .debug-check input { cursor: pointer; }
+        .settings-row.locked .debug-check { opacity: 1; pointer-events: auto; }
+        .settings-row.locked .debug-check input { pointer-events: auto; }
 
         .debug-panel {
             display: none;
@@ -642,7 +637,7 @@
     </div>
 
     <script>
-        let gameId = null;
+        let boardState = null;
         let gameActive = false;
         let isProcessing = false;
         let selectedColumn = 3;
@@ -739,15 +734,15 @@
             }
         }
 
-        async function setDepth(depth) { if (!gameId) return; try { await fetch(`/api/set-depth?game_id=${gameId}&depth=${depth}`); } catch {} }
+        // Depth is now sent with each move request - no separate setDepth needed
 
         async function newGame(aiFirst = false) {
             clearBoard();
             isProcessing = false;
             try {
-                const res = await fetch(aiFirst ? '/api/new-game-ai-first' : '/api/new-game');
+                const res = await fetch(aiFirst ? `/api/new-game-ai-first?depth=${depthSelect.value}` : '/api/new-game');
                 const data = await res.json();
-                gameId = data.gameId || data['game-id'];
+                boardState = data.board;
                 gameActive = true;
                 selectedColumn = 3;
                 newGameBtn.textContent = 'Resign';
@@ -758,7 +753,6 @@
                 setStatus(data.message);
                 statusEl.className = 'status';
                 statsEl.textContent = '';
-                await setDepth(depthSelect.value);
                 clearDebug();
                 if (aiFirst && data) showDebug(data);
             } catch { setStatus('Connection error'); }
@@ -781,7 +775,7 @@
         }
 
         async function makeMove(column) {
-            if (!gameActive || !gameId) { setStatus('Press New Game to start'); return; }
+            if (!gameActive || !boardState) { setStatus('Press New Game to start'); return; }
             if (isProcessing) return;
 
             if (cellElements[column][5].classList.contains('player') || cellElements[column][5].classList.contains('ai')) return;
@@ -799,11 +793,16 @@
             setStatus('AI thinking...', true);
             const thinkingStartTime = Date.now();
             try {
-                const res = await fetch(`/api/move?game_id=${gameId}&column=${column}`);
+                const res = await fetch(`/api/move?column=${column}&depth=${depthSelect.value}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ board: boardState })
+                });
                 const data = await res.json();
                 if (data.error) { setStatus(data.error); if (playerRow !== null) { cellElements[column][playerRow].className = 'cell'; previousBoard[column][playerRow] = null; } return; }
                 const elapsed = Date.now() - thinkingStartTime;
                 if (elapsed < 1200) { await new Promise(r => setTimeout(r, 1200 - elapsed)); }
+                boardState = data.board;
                 updateBoard(data.board);
                 setStatus(data.message);
                 if (data.evaluations) statsEl.textContent = `${data.evaluations.toLocaleString()} positions`;
