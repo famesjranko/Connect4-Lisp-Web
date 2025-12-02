@@ -1,0 +1,1121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connect 4 · Lisp AI</title>
+    <link href="https://fonts.googleapis.com/css2?family=VT323&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0a0a0a;
+            --surface: #0d1a0d;
+            --border: #1a3a1a;
+            --text: #33ff33;
+            --text-dim: #1a8a1a;
+            --accent: #33ff33;
+            --red: #ff4444;
+            --yellow: #ffff44;
+            --glow: rgba(51, 255, 51, 0.6);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Fira Code', monospace;
+            background: var(--bg);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text);
+            padding: 20px;
+        }
+
+        /* CRT Effects */
+        .crt {
+            position: relative;
+        }
+
+        .crt::before {
+            content: "";
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: repeating-linear-gradient(
+                0deg,
+                rgba(0, 0, 0, 0.15),
+                rgba(0, 0, 0, 0.15) 1px,
+                transparent 1px,
+                transparent 2px
+            );
+            pointer-events: none;
+            z-index: 1000;
+        }
+
+        .crt::after {
+            content: "";
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(ellipse at center, transparent 0%, rgba(0,0,0,0.3) 100%);
+            pointer-events: none;
+            z-index: 999;
+        }
+
+        /* Theme Dropdown */
+        .theme-select {
+            position: fixed;
+            top: 16px;
+            right: 16px;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.7rem;
+            color: var(--text-dim);
+        }
+
+        .theme-select select {
+            font-family: 'Fira Code', monospace;
+            font-size: 0.7rem;
+            padding: 4px 8px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            color: var(--text);
+            cursor: pointer;
+        }
+
+        .theme-select select:hover {
+            border-color: var(--accent);
+            box-shadow: 0 0 5px var(--glow);
+        }
+
+        .container {
+            max-width: 520px;
+            width: 100%;
+        }
+
+        /* Terminal Window */
+        .terminal {
+            background: var(--surface);
+            border: 2px solid var(--border);
+            border-radius: 4px;
+            overflow: hidden;
+            box-shadow: 0 0 30px rgba(51, 255, 51, 0.1), inset 0 0 60px rgba(51, 255, 51, 0.03);
+        }
+
+        .terminal-header {
+            background: var(--border);
+            padding: 6px 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border-bottom: 1px solid var(--text-dim);
+        }
+
+        .terminal-dots {
+            display: flex;
+            gap: 6px;
+        }
+
+        .terminal-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--text-dim);
+        }
+
+        .terminal-dot.red { background: var(--red); box-shadow: 0 0 4px var(--red); }
+        .terminal-dot.yellow { background: var(--yellow); box-shadow: 0 0 4px var(--yellow); }
+        .terminal-dot.green { background: var(--accent); box-shadow: 0 0 4px var(--accent); }
+
+        .terminal-title {
+            flex: 1;
+            text-align: center;
+            font-size: 0.7rem;
+            color: var(--text-dim);
+            letter-spacing: 1px;
+        }
+
+        .terminal-body {
+            padding: 16px;
+        }
+
+        /* Header */
+        header {
+            margin-bottom: 16px;
+            font-family: 'VT323', monospace;
+        }
+
+        .prompt {
+            color: var(--text-dim);
+            font-size: 0.8rem;
+        }
+
+        h1 {
+            font-family: 'VT323', monospace;
+            font-size: 2rem;
+            font-weight: normal;
+            letter-spacing: 2px;
+            text-shadow: 0 0 10px var(--glow);
+            margin: 4px 0;
+        }
+
+        .comment {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            font-style: italic;
+        }
+
+        /* Controls */
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 16px;
+            padding: 12px;
+            border: 1px dashed var(--border);
+        }
+
+        .control-row {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .btn {
+            font-family: 'Fira Code', monospace;
+            font-size: 0.75rem;
+            padding: 6px 14px;
+            background: transparent;
+            border: 1px solid var(--accent);
+            color: var(--accent);
+            cursor: pointer;
+            transition: all 0.15s;
+            text-transform: uppercase;
+        }
+
+        .btn:hover {
+            background: var(--accent);
+            color: var(--bg);
+            box-shadow: 0 0 15px var(--glow);
+        }
+
+        .btn.game-active {
+            background: rgba(51, 255, 51, 0.1);
+            box-shadow: 0 0 10px var(--glow);
+            animation: blink-border 1s infinite;
+        }
+
+        @keyframes blink-border {
+            0%, 100% { border-color: var(--accent); }
+            50% { border-color: var(--text-dim); }
+        }
+
+        .settings {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            font-size: 0.75rem;
+            transition: opacity 0.3s;
+        }
+
+        .settings.locked {
+            opacity: 0.4;
+            pointer-events: none;
+        }
+
+        .setting {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .setting-label {
+            color: var(--text-dim);
+        }
+
+        /* Toggle */
+        .toggle-container {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .toggle-label {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            transition: all 0.2s;
+        }
+
+        .toggle-label.active {
+            color: var(--text);
+            text-shadow: 0 0 5px var(--glow);
+        }
+
+        .toggle-switch {
+            position: relative;
+            width: 36px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: var(--bg);
+            border: 1px solid var(--red);
+            transition: all 0.3s;
+        }
+
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 10px;
+            width: 10px;
+            left: 3px;
+            bottom: 3px;
+            background: var(--red);
+            box-shadow: 0 0 6px var(--red);
+            transition: transform 0.3s;
+        }
+
+        .toggle-switch input:checked + .toggle-slider {
+            border-color: var(--yellow);
+        }
+
+        .toggle-switch input:checked + .toggle-slider:before {
+            transform: translateX(18px);
+            background: var(--yellow);
+            box-shadow: 0 0 6px var(--yellow);
+        }
+
+        .depth-select {
+            font-family: 'Fira Code', monospace;
+            font-size: 0.75rem;
+            padding: 2px 6px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            color: var(--text);
+            cursor: pointer;
+        }
+
+        .depth-select:hover {
+            border-color: var(--accent);
+        }
+
+        /* Board */
+        .board-container {
+            margin-bottom: 12px;
+        }
+
+        .board-label {
+            font-size: 0.7rem;
+            color: var(--text-dim);
+            margin-bottom: 8px;
+        }
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 4px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            padding: 8px;
+        }
+
+        .cell {
+            aspect-ratio: 1;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            cursor: pointer;
+            transition: all 0.15s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'VT323', monospace;
+            font-size: 1.4rem;
+            color: var(--text-dim);
+        }
+
+        .cell:hover {
+            border-color: var(--text);
+            box-shadow: 0 0 5px var(--glow);
+        }
+
+        .cell::after {
+            content: '·';
+        }
+
+        .cell.player {
+            background: rgba(255, 68, 68, 0.1);
+            border-color: var(--red);
+            box-shadow: 0 0 8px rgba(255, 68, 68, 0.5);
+        }
+
+        .cell.player::after {
+            content: 'X';
+            color: var(--red);
+            text-shadow: 0 0 8px var(--red);
+        }
+
+        .cell.ai {
+            background: rgba(255, 255, 68, 0.1);
+            border-color: var(--yellow);
+            box-shadow: 0 0 8px rgba(255, 255, 68, 0.5);
+        }
+
+        .cell.ai::after {
+            content: 'O';
+            color: var(--yellow);
+            text-shadow: 0 0 8px var(--yellow);
+        }
+
+        .cell.dropping {
+            animation: drop 0.4s ease-in;
+        }
+
+        @keyframes drop {
+            from { transform: translateY(var(--drop-distance, -100px)); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .cell.winning {
+            animation: pulse 0.5s ease-in-out infinite alternate;
+        }
+
+        @keyframes pulse {
+            to { 
+                transform: scale(1.1);
+                box-shadow: 0 0 15px currentColor;
+            }
+        }
+
+        .columns {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 4px;
+            padding: 0 8px;
+            margin-top: 4px;
+        }
+
+        .col-num {
+            text-align: center;
+            font-size: 0.7rem;
+            color: var(--text-dim);
+            cursor: pointer;
+            padding: 2px;
+            font-family: 'VT323', monospace;
+        }
+
+        .col-num:hover,
+        .col-num.selected {
+            color: var(--accent);
+            text-shadow: 0 0 5px var(--glow);
+        }
+
+        /* Status */
+        .status-line {
+            padding: 8px 0;
+            border-top: 1px dashed var(--border);
+            margin-top: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.75rem;
+        }
+
+        .cursor {
+            display: inline-block;
+            width: 8px;
+            height: 14px;
+            background: var(--text);
+            animation: blink 1s step-end infinite;
+        }
+
+        @keyframes blink {
+            50% { opacity: 0; }
+        }
+
+        .status {
+            color: var(--text);
+        }
+
+        .status.win { 
+            color: var(--accent); 
+            text-shadow: 0 0 10px var(--glow);
+        }
+        
+        .status.lose { 
+            color: var(--red); 
+            text-shadow: 0 0 10px rgba(255, 68, 68, 0.6);
+        }
+
+        .stats {
+            margin-left: auto;
+            font-size: 0.65rem;
+            color: var(--text-dim);
+        }
+        .spinner {
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(255,255,255,0.2);
+            border-top-color: #33ff33;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            display: none;
+        }
+
+        .spinner.active {
+            display: inline-block;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+
+        /* Legend */
+        .legend {
+            display: flex;
+            gap: 20px;
+            font-size: 0.7rem;
+            color: var(--text-dim);
+            padding: 8px 0;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .legend-char {
+            font-family: 'VT323', monospace;
+            font-size: 1rem;
+        }
+
+        .legend-char.player { color: var(--red); text-shadow: 0 0 5px var(--red); }
+        .legend-char.ai { color: var(--yellow); text-shadow: 0 0 5px var(--yellow); }
+        /* Footer */
+        /* Debug */
+        .debug-check {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            cursor: pointer;
+            margin-left: 16px;
+        }
+        .debug-check:hover { color: var(--text); }
+        .debug-check input { cursor: pointer; }
+        .settings.locked .debug-check { opacity: 1; pointer-events: auto; }
+
+        .debug-panel {
+            display: none;
+            margin-top: 16px;
+            padding: 16px 20px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid var(--accent);
+            border-radius: 10px;
+        }
+
+        .debug-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 12px;
+            margin-bottom: 6px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+
+        .debug-row span:first-child { color: var(--text-dim); }
+        .debug-row span:last-child { color: var(--text); font-weight: 600; }
+
+        .debug-scores {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            margin: 12px 0;
+        }
+
+        .debug-col {
+            flex: 1;
+            min-width: 0;
+            text-align: center;
+            padding: 8px 4px;
+            background: rgba(255,255,255,0.08);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .debug-col .num {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            margin-bottom: 4px;
+        }
+
+        .debug-col .score {
+            font-family: monospace;
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--text);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .debug-col .score.pos { color: #4ade80; }
+        .debug-col .score.neg { color: #f87171; }
+        .debug-col .score.best { color: #fbbf24; }
+        .debug-col .score.x { color: var(--text-dim); opacity: 0.5; }
+
+        .debug-chose {
+            text-align: center;
+            font-size: 0.9rem;
+            padding-top: 8px;
+        }
+
+        .debug-chose span {
+            color: var(--yellow, #fbbf24);
+            font-weight: bold;
+        }
+
+
+        footer {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px dashed var(--border);
+            font-size: 0.65rem;
+            color: var(--text-dim);
+        }
+
+        footer p {
+            margin: 2px 0;
+        }
+
+        .footer-comment {
+            color: var(--text-dim);
+            font-style: italic;
+        }
+
+        .keys {
+            margin-top: 8px;
+            font-size: 0.6rem;
+            opacity: 0.6;
+        }
+
+        .version {
+            margin-top: 4px;
+            font-size: 0.55rem;
+            opacity: 0.4;
+        }
+
+        @media (max-width: 500px) {
+            .control-row {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+        }
+    
+        
+
+    </style>
+</head>
+<body class="crt">
+    <div class="theme-select">
+        <span>;; theme:</span>
+        <select id="theme-dropdown" onchange="window.location.href=this.value">
+            <option value="modern.html">Modern</option>
+            <option value="arcade.html">Arcade</option>
+            <option value="terminal.html" selected>Terminal</option>
+            <option value="neon.html">Neon</option>
+            <option value="paper.html">Paper</option>
+            <option value="midnight.html">Midnight</option>
+            <option value="sunset.html">Sunset</option>
+            <option value="hacker.html">Hacker</option>
+        </select>
+    </div>
+
+    <div class="container">
+        <div class="terminal">
+            <div class="terminal-header">
+                <div class="terminal-dots">
+                    <span class="terminal-dot red"></span>
+                    <span class="terminal-dot yellow"></span>
+                    <span class="terminal-dot green"></span>
+                </div>
+                <span class="terminal-title">sbcl — connect4-ai</span>
+                <div style="width: 42px;"></div>
+            </div>
+
+            <div class="terminal-body">
+                <header>
+                    <p class="prompt">CL-USER&gt; (load "connect4")</p>
+                    <h1>CONNECT-4</h1>
+                    <p class="comment">;; minimax α-β pruning engine</p>
+                </header>
+
+                <div class="controls">
+                    <div class="control-row">
+                        <button class="btn" id="new-game">(new-game)</button>
+                        <div class="settings" id="settings-row">
+                            <div class="setting">
+                                <span class="setting-label">:first</span>
+                                <div class="toggle-container">
+                                    <span class="toggle-label active" id="label-you">'you</span>
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="ai-first-toggle">
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                    <span class="toggle-label" id="label-ai">'ai</span>
+                                </div>
+                            </div>
+                            <div class="setting">
+                                <span class="setting-label">:depth</span>
+                                <select id="depth" class="depth-select">
+                                    <option value="1">1</option>
+                                    <option value="2">2</option>
+                                    <option value="3">3</option>
+                                    <option value="4" selected>4</option>
+                                    <option value="5">5</option>
+                                    <option value="6">6</option>
+                        <option value="7">7</option>
+                        <option value="8">8</option>
+                        <option value="9">9</option>
+                        <option value="10">10</option>
+                                </select>
+                            </div>
+                            <label class="debug-check"><input type="checkbox" id="debug-mode"><span>:debug</span></label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="board-container">
+                    <p class="board-label">;; *game-board*</p>
+                    <div class="board" id="board"></div>
+                    <div class="columns">
+                        <span class="col-num" data-col="0">1</span>
+                        <span class="col-num" data-col="1">2</span>
+                        <span class="col-num" data-col="2">3</span>
+                        <span class="col-num" data-col="3">4</span>
+                        <span class="col-num" data-col="4">5</span>
+                        <span class="col-num" data-col="5">6</span>
+                        <span class="col-num" data-col="6">7</span>
+                    </div>
+                </div>
+
+                <div class="legend">
+                    <div class="legend-item">
+                        <span class="legend-char player">X</span>
+                        <span>player</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-char ai">O</span>
+                        <span>ai</span>
+                    </div>
+                </div>
+
+                <div class="status-line">
+                    <span class="cursor"></span>
+                    <span class="status" id="status"><span class="spinner" id="spinner"></span><span id="status-text">(awaiting input...)</span></span>
+                    <span class="stats" id="stats"></span>
+                </div>
+
+        <div class="debug-panel" id="debug-panel">
+            <div class="debug-row"><span>Depth:</span><span id="dbg-depth">-</span></div>
+            <div class="debug-row"><span>Instant Win:</span><span id="dbg-win">-</span></div>
+            <div class="debug-row"><span>Must Block:</span><span id="dbg-block">-</span></div>
+            <div class="debug-scores" id="dbg-scores">
+                <div class="debug-col"><div class="num">1</div><div class="score">-</div></div>
+                <div class="debug-col"><div class="num">2</div><div class="score">-</div></div>
+                <div class="debug-col"><div class="num">3</div><div class="score">-</div></div>
+                <div class="debug-col"><div class="num">4</div><div class="score">-</div></div>
+                <div class="debug-col"><div class="num">5</div><div class="score">-</div></div>
+                <div class="debug-col"><div class="num">6</div><div class="score">-</div></div>
+                <div class="debug-col"><div class="num">7</div><div class="score">-</div></div>
+            </div>
+            <div class="debug-chose">AI Chose: <span id="dbg-chose">-</span></div>
+        </div>
+
+        <footer><footer>
+                    <p class="footer-comment">;; Original engine by Andrew McDonald</p>
+                    <p class="footer-comment">;; Minimax with α-β pruning</p>
+                    <p class="keys">1-7 drop · ← → select · RET confirm</p>
+                    <p class="version">v3.2</p>
+                </footer>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Game state
+        let gameId = null;
+        let gameActive = false;
+        let isProcessing = false;
+        let selectedColumn = 3;
+        let previousBoard = null;
+
+        const statusEl = document.getElementById('status');
+        const statusTextEl = document.getElementById('status-text');
+        const spinnerEl = document.getElementById('spinner');
+        const statsEl = document.getElementById('stats');
+        const depthSelect = document.getElementById('depth');
+        const newGameBtn = document.getElementById('new-game');
+        const settingsRow = document.getElementById('settings-row');
+        const cellElements = [];
+
+        function setStatus(text, showSpinner = false) {
+            statusTextEl.textContent = text;
+            spinnerEl.classList.toggle('active', showSpinner);
+        }
+
+        function initBoard() {
+            const board = document.getElementById('board');
+            board.innerHTML = '';
+            cellElements.length = 0;
+
+            for (let row = 5; row >= 0; row--) {
+                for (let col = 0; col < 7; col++) {
+                    if (!cellElements[col]) cellElements[col] = [];
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.addEventListener('click', () => makeMove(col));
+                    board.appendChild(cell);
+                    cellElements[col][row] = cell;
+                }
+            }
+
+            document.querySelectorAll('.col-num').forEach(el => {
+                el.addEventListener('click', () => makeMove(parseInt(el.dataset.col)));
+            });
+
+            document.addEventListener('keydown', handleKeydown);
+        }
+
+        function clearBoard() {
+            for (let col = 0; col < 7; col++) {
+                for (let row = 0; row < 6; row++) {
+                    if (cellElements[col]?.[row]) {
+                        cellElements[col][row].className = 'cell';
+                    }
+                }
+            }
+            previousBoard = null;
+        }
+
+        function updateBoard(board, aiMoveCol) {
+            if (!board) return;
+
+            for (let col = 0; col < 7; col++) {
+                for (let row = 0; row < 6; row++) {
+                    const cell = cellElements[col][row];
+                    const value = board[col][row];
+                    const prevValue = previousBoard?.[col]?.[row];
+
+                    if (value === 'X') {
+                        if (prevValue !== 'X') {
+                            const dropDistance = -((6 - row) * 58);
+                            cell.style.setProperty('--drop-distance', `${dropDistance}px`);
+                            cell.className = 'cell player dropping';
+                            setTimeout(() => cell.classList.remove('dropping'), 400);
+                        } else {
+                            cell.className = 'cell player';
+                        }
+                    } else if (value === 'O') {
+                        if (prevValue !== 'O') {
+                            const dropDistance = -((6 - row) * 58);
+                            cell.style.setProperty('--drop-distance', `${dropDistance}px`);
+                            cell.className = 'cell ai dropping';
+                            setTimeout(() => cell.classList.remove('dropping'), 400);
+                        } else {
+                            cell.className = 'cell ai';
+                        }
+                    } else {
+                        cell.className = 'cell';
+                    }
+                }
+            }
+
+            previousBoard = JSON.parse(JSON.stringify(board));
+        }
+
+        function highlightWinningCells(cells) {
+            if (!cells?.length) return;
+            setTimeout(() => {
+                cells.forEach(([col, row]) => {
+                    cellElements[col]?.[row]?.classList.add('winning');
+                });
+            }, 300);
+        }
+
+        function updateColumnSelection() {
+            document.querySelectorAll('.col-num').forEach((el, i) => {
+                el.classList.toggle('selected', i === selectedColumn && gameActive);
+            });
+        }
+
+        function handleKeydown(e) {
+            if (e.key >= '1' && e.key <= '7') {
+                if (gameActive) makeMove(parseInt(e.key) - 1);
+                return;
+            }
+            switch(e.key) {
+                case 'ArrowLeft':
+                    e.preventDefault();
+                    selectedColumn = Math.max(0, selectedColumn - 1);
+                    updateColumnSelection();
+                    break;
+                case 'ArrowRight':
+                    e.preventDefault();
+                    selectedColumn = Math.min(6, selectedColumn + 1);
+                    updateColumnSelection();
+                    break;
+                case 'Enter':
+                case ' ':
+                    e.preventDefault();
+                    if (gameActive) makeMove(selectedColumn);
+                    break;
+                case 'n':
+                case 'N':
+                    if (!e.ctrlKey && !e.metaKey) {
+                        newGame(document.getElementById('ai-first-toggle').checked);
+                    }
+                    break;
+            }
+        }
+
+        async function setDepth(depth) {
+            if (!gameId) return;
+            try { await fetch(`/api/set-depth?game_id=${gameId}&depth=${depth}`); } catch {}
+        }
+
+        async function newGame(aiFirst = false) {
+            clearBoard();
+            isProcessing = false;
+            try {
+                const endpoint = aiFirst ? '/api/new-game-ai-first' : '/api/new-game';
+                const res = await fetch(endpoint);
+                const data = await res.json();
+
+                gameId = data.gameId || data['game-id'];
+                gameActive = true;
+                selectedColumn = 3;
+
+                // Update button state
+                newGameBtn.textContent = '(resign)';
+                newGameBtn.classList.add('game-active');
+                settingsRow.classList.add('locked');
+
+                updateBoard(data.board, data.aiMove || data['ai-move']);
+                updateColumnSelection();
+                setStatus(data.message);
+                statusEl.className = 'status';
+                statsEl.textContent = '';
+
+                await setDepth(depthSelect.value);
+                clearDebug();
+                if (aiFirst && data) showDebug(data);
+            } catch {
+                setStatus('(connection-error)');
+            }
+        }
+
+        function endGame() {
+            gameActive = false;
+            newGameBtn.textContent = '(new-game)';
+            newGameBtn.classList.remove('game-active');
+            settingsRow.classList.remove('locked');
+            spinnerEl.classList.remove('active');
+        }
+
+        function findNextEmptyRow(col) {
+            for (let row = 0; row < 6; row++) {
+                const cell = cellElements[col][row];
+                if (!cell.classList.contains('player') && !cell.classList.contains('ai')) {
+                    return row;
+                }
+            }
+            return null;
+        }
+
+        async function makeMove(column) {
+            if (!gameActive || !gameId) {
+                setStatus('(call new-game first)');
+                return;
+            }
+
+            if (isProcessing) return;
+
+            if (cellElements[column][5].classList.contains('player') || 
+                cellElements[column][5].classList.contains('ai')) {
+                return;
+            }
+
+            isProcessing = true;
+
+            const playerRow = findNextEmptyRow(column);
+            if (playerRow !== null) {
+                // Calculate drop distance from top of board
+                const dropDistance = -((6 - playerRow) * 58);
+                cellElements[column][playerRow].style.setProperty('--drop-distance', `${dropDistance}px`);
+                cellElements[column][playerRow].className = 'cell player dropping';
+                setTimeout(() => cellElements[column][playerRow].classList.remove('dropping'), 400);
+                
+                // Update previousBoard so updateBoard() won't re-animate this cell
+                if (!previousBoard) {
+                    previousBoard = Array(7).fill(null).map(() => Array(6).fill(null));
+                }
+                previousBoard[column][playerRow] = 'X';
+            }
+
+            // Show thinking status immediately
+            setStatus('(evaluating...)', true);
+            const thinkingStartTime = Date.now();
+
+            try {
+                const res = await fetch(`/api/move?game_id=${gameId}&column=${column}`);
+                const data = await res.json();
+
+                if (data.error) {
+                    setStatus(`(error "${data.error}")`);
+                    if (playerRow !== null) {
+                        cellElements[column][playerRow].className = 'cell';
+                        previousBoard[column][playerRow] = null;
+                    }
+                    return;
+                }
+
+                // Ensure thinking message shows for at least 600ms
+                const elapsed = Date.now() - thinkingStartTime;
+                if (elapsed < 1200) {
+                    await new Promise(r => setTimeout(r, 1200 - elapsed));
+                }
+
+                updateBoard(data.board, data.aiMove || data['ai-move']);
+                setStatus(data.message);
+
+                if (data.evaluations) {
+                    statsEl.textContent = `${data.evaluations.toLocaleString()} nodes`;
+                }
+
+                showDebug(data);
+
+                const winningCells = data.winningCells || data['winning-cells'];
+
+                if (data.status === 'player_wins') {
+                    setStatus('(player-wins!)');
+                    statusEl.className = 'status win';
+                    endGame();
+                    highlightWinningCells(winningCells);
+                } else if (data.status === 'ai_wins') {
+                    setStatus('(ai-wins)');
+                    statusEl.className = 'status lose';
+                    endGame();
+                    highlightWinningCells(winningCells);
+                } else if (data.status === 'draw') {
+                    setStatus('(draw)');
+                    endGame();
+                } else {
+                    statusEl.className = 'status';
+                }
+            } catch {
+                setStatus('(connection-error)');
+                if (playerRow !== null) cellElements[column][playerRow].className = 'cell';
+            }
+
+            isProcessing = false;
+            updateColumnSelection();
+        }
+
+        // Toggle listeners
+        const toggle = document.getElementById('ai-first-toggle');
+        const labelYou = document.getElementById('label-you');
+        const labelAi = document.getElementById('label-ai');
+
+        toggle.addEventListener('change', () => {
+            labelYou.classList.toggle('active', !toggle.checked);
+            labelAi.classList.toggle('active', toggle.checked);
+        });
+
+        newGameBtn.addEventListener('click', () => {
+            if (gameActive) {
+                endGame();
+                clearDebug();
+                setStatus('(adjust settings, then start new game)');
+                return;
+            }
+            newGame(toggle.checked);
+        });
+
+        
+        // Debug mode
+        
+        // Debug
+        const dbgToggle = document.getElementById('debug-mode');
+        const dbgPanel = document.getElementById('debug-panel');
+        let dbgOn = false;
+        dbgToggle.addEventListener('change', () => {
+            dbgOn = dbgToggle.checked;
+            dbgPanel.style.display = dbgOn ? 'block' : 'none';
+        });
+        function showDebug(data) {
+            if (!dbgOn) return;
+            document.getElementById('dbg-depth').textContent = depthSelect.value;
+            const win = data['immediate-win'] ?? data.immediateWin;
+            const blk = data['immediate-block'] ?? data.immediateBlock;
+            document.getElementById('dbg-win').textContent = win != null ? `Col ${win+1}` : 'None';
+            document.getElementById('dbg-block').textContent = blk != null ? `Col ${blk+1}` : 'None';
+            const scores = data['ai-scores'] || data.aiScores || [];
+            const chose = data['ai-move'] ?? data.aiMove;
+            const els = document.querySelectorAll('#dbg-scores .debug-col .score');
+            const fmt = (n) => {
+                if (n === null) return 'X';
+                if (n === 50000) return 'WIN';
+                if (n === -50000) return 'LOSS';
+                if (n === 49000) return '49k';
+                if (n === -49000) return '-49k';
+                if (Math.abs(n) >= 10000) return (n > 0 ? '' : '-') + Math.round(Math.abs(n)/1000) + 'k';
+                if (Number.isInteger(n)) return String(n);
+                return n.toFixed(1);
+            };
+            scores.forEach(([c, s]) => {
+                if (els[c]) {
+                    if (s === null) { els[c].textContent = 'X'; els[c].className = 'score x'; }
+                    else {
+                        els[c].textContent = fmt(s);
+                        els[c].className = 'score' + (c === chose ? ' best' : s > 0 ? ' pos' : s < 0 ? ' neg' : '');
+                    }
+                }
+            });
+            document.getElementById('dbg-chose').textContent = chose != null ? `Column ${chose+1}` : '-';
+        }
+        function clearDebug() {
+            ['dbg-depth','dbg-win','dbg-block','dbg-chose'].forEach(id => document.getElementById(id).textContent = '-');
+            document.querySelectorAll('#dbg-scores .score').forEach(e => { e.textContent = '-'; e.className = 'score'; });
+        }
+
+        initBoard();
+    </script>
+</body>
+</html>

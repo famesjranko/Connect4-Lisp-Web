@@ -44,7 +44,9 @@
 ;; successor boards, i.e., all possible moves a player could make.
 
 (defun movegen (board player)
-  (movegen-helper board player '(0 1 2 3 4 5 6)))
+  ;; Prioritize center columns for better strategy
+  ;; After cons reversal, order becomes: 3, 2, 4, 1, 5, 0, 6 (center first)
+  (movegen-helper board player '(6 0 5 1 4 2 3)))
 
 ;; MOVEGEN-HELPER Iterates through the complete list of moves.
 ;; Whenever a legal move is found,that move is cons'ed into the list moves
