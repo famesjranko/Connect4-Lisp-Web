@@ -1,0 +1,979 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connect 4 · Lisp AI</title>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0a0a0f;
+            --surface: #1a1a2e;
+            --border: #0047ab;
+            --text: #e0e0e0;
+            --text-dim: #666;
+            --accent: #4d94ff;
+            --accent-dim: #003380;
+            --red: #ff3860;
+            --red-glow: #ff6b6b;
+            --yellow: #ffd93d;
+            --yellow-glow: #ffe066;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Space Mono', monospace;
+            background: var(--bg);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text);
+            padding: 20px;
+            background-image: 
+                radial-gradient(ellipse at top, #1a1a3e 0%, transparent 50%),
+                radial-gradient(ellipse at bottom, #0a0a1f 0%, transparent 50%);
+        }
+
+        /* Theme Dropdown */
+        .theme-select {
+            position: fixed;
+            top: 16px;
+            right: 16px;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.65rem;
+            color: var(--text-dim);
+        }
+
+        .theme-select select {
+            font-family: 'Space Mono', monospace;
+            font-size: 0.65rem;
+            padding: 6px 10px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--text);
+            cursor: pointer;
+        }
+
+        .theme-select select:hover {
+            border-color: var(--accent);
+            box-shadow: 0 0 10px var(--accent);
+        }
+
+        .container {
+            max-width: 480px;
+            width: 100%;
+        }
+
+        header {
+            margin-bottom: 32px;
+            text-align: center;
+        }
+
+        h1 {
+            font-family: 'Press Start 2P', cursive;
+            font-size: 1.4rem;
+            letter-spacing: 0.05em;
+            margin-bottom: 8px;
+            background: linear-gradient(135deg, var(--red) 0%, var(--yellow) 50%, var(--red) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            filter: drop-shadow(0 0 10px var(--red));
+            animation: glow 2s ease-in-out infinite alternate;
+        }
+
+        @keyframes glow {
+            from { filter: drop-shadow(0 0 10px var(--red)); }
+            to { filter: drop-shadow(0 0 20px var(--yellow)); }
+        }
+
+        .tagline {
+            font-size: 0.7rem;
+            color: var(--text-dim);
+            letter-spacing: 2px;
+        }
+
+        /* Controls */
+        .controls {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 24px;
+            padding: 12px 16px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            box-shadow: 0 0 20px rgba(0, 71, 171, 0.3);
+        }
+
+        .btn {
+            font-family: 'Press Start 2P', cursive;
+            font-size: 0.55rem;
+            padding: 10px 16px;
+            background: transparent;
+            border: 2px solid var(--accent);
+            color: var(--accent);
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+        }
+
+        .btn:hover {
+            background: var(--accent);
+            color: var(--bg);
+            box-shadow: 0 0 20px var(--accent);
+        }
+
+        .btn.active {
+            background: var(--accent-dim);
+            border-color: var(--accent);
+            box-shadow: 0 0 15px rgba(77, 148, 255, 0.5);
+        }
+
+        .btn.game-active {
+            border-color: #4ade80;
+            color: #4ade80;
+            box-shadow: 0 0 20px rgba(74, 222, 128, 0.4);
+        }
+
+        .btn.game-active:hover {
+            background: #4ade80;
+            color: var(--bg);
+            box-shadow: 0 0 30px #4ade80;
+        }
+
+        .settings {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            transition: opacity 0.3s;
+        }
+
+        .settings.locked {
+            opacity: 0.5;
+            pointer-events: none;
+        }
+
+        .setting {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.7rem;
+            color: var(--text-dim);
+        }
+
+        /* Toggle */
+        .toggle {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .toggle-label {
+            font-size: 0.7rem;
+            color: var(--text-dim);
+            transition: all 0.15s;
+        }
+
+        .toggle-label.active {
+            color: var(--text);
+            text-shadow: 0 0 8px var(--text);
+        }
+
+        .toggle-switch {
+            width: 36px;
+            height: 20px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            position: relative;
+            cursor: pointer;
+        }
+
+        .toggle-switch input { display: none; }
+
+        .toggle-knob {
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 12px;
+            height: 12px;
+            background: var(--red);
+            border-radius: 50%;
+            transition: all 0.2s;
+            box-shadow: 0 0 8px var(--red);
+        }
+
+        .toggle-switch input:checked + .toggle-knob {
+            left: 19px;
+            background: var(--yellow);
+            box-shadow: 0 0 8px var(--yellow);
+        }
+
+        .select {
+            font-family: 'Space Mono', monospace;
+            font-size: 0.7rem;
+            padding: 4px 8px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--text);
+            cursor: pointer;
+        }
+
+        /* Board */
+        .board-wrapper {
+            background: linear-gradient(145deg, #0047ab, #003380);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 16px;
+            box-shadow: 
+                0 10px 40px rgba(0, 71, 171, 0.4),
+                inset 0 2px 0 rgba(255,255,255,0.1),
+                inset 0 -2px 0 rgba(0,0,0,0.3);
+            transform: perspective(1000px) rotateX(3deg);
+        }
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 8px;
+        }
+
+        .cell {
+            aspect-ratio: 1;
+            background: #0d1117;
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 50%;
+            cursor: pointer;
+            transition: all 0.15s;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.5);
+        }
+
+        .cell:hover {
+            border-color: rgba(255,255,255,0.3);
+        }
+
+        .cell.player {
+            background: radial-gradient(circle at 30% 30%, var(--red-glow), var(--red));
+            border-color: var(--red);
+            box-shadow: 0 0 20px var(--red), inset 0 -3px 6px rgba(0,0,0,0.3);
+        }
+
+        .cell.ai {
+            background: radial-gradient(circle at 30% 30%, var(--yellow-glow), var(--yellow));
+            border-color: var(--yellow);
+            box-shadow: 0 0 20px var(--yellow), inset 0 -3px 6px rgba(0,0,0,0.3);
+        }
+
+        .cell.dropping {
+            animation: drop 0.4s ease-in;
+        }
+
+        @keyframes drop {
+            from { transform: translateY(var(--drop-distance, -100px)); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .cell.winning {
+            animation: pulse 0.6s ease-in-out infinite alternate;
+        }
+
+        @keyframes pulse {
+            to { 
+                transform: scale(1.1);
+                box-shadow: 0 0 30px currentColor, 0 0 50px currentColor;
+            }
+        }
+
+        .columns {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .col-num {
+            text-align: center;
+            font-size: 0.7rem;
+            color: #aaa;
+            cursor: pointer;
+            padding: 4px;
+            transition: all 0.15s;
+        }
+
+        .col-num:hover,
+        .col-num.selected {
+            color: var(--accent);
+            text-shadow: 0 0 10px var(--accent);
+        }
+
+        /* Status */
+        .status-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 16px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            margin-bottom: 16px;
+            min-height: 44px;
+        }
+
+        .status {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .status.win { 
+            color: #4ade80; 
+            text-shadow: 0 0 10px #4ade80;
+        }
+
+        .status.lose { 
+            color: var(--red); 
+            text-shadow: 0 0 10px var(--red);
+        }
+
+        .stats {
+            font-size: 0.65rem;
+            color: var(--text-dim);
+        }
+        .spinner {
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(255,255,255,0.2);
+            border-top-color: #4d94ff;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            display: none;
+        }
+
+        .spinner.active {
+            display: inline-block;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+
+        /* Legend */
+        .legend {
+            display: flex;
+            justify-content: center;
+            gap: 24px;
+            font-size: 0.65rem;
+            color: var(--text-dim);
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .legend-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .legend-dot.player { 
+            background: var(--red); 
+            box-shadow: 0 0 8px var(--red);
+        }
+
+        .legend-dot.ai { 
+            background: var(--yellow); 
+            box-shadow: 0 0 8px var(--yellow);
+        }
+        /* Footer */
+        /* Debug */
+        .debug-check {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            cursor: pointer;
+            margin-left: 16px;
+        }
+        .debug-check:hover { color: var(--text); }
+        .debug-check input { cursor: pointer; }
+        .settings-row.locked .debug-check { opacity: 1; pointer-events: auto; }
+
+        .debug-panel {
+            display: none;
+            margin-top: 16px;
+            padding: 16px 20px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid var(--accent);
+            border-radius: 10px;
+        }
+
+        .debug-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 12px;
+            margin-bottom: 6px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+
+        .debug-row span:first-child { color: var(--text-dim); }
+        .debug-row span:last-child { color: var(--text); font-weight: 600; }
+
+        .debug-scores {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            margin: 12px 0;
+        }
+
+        .debug-col {
+            flex: 1;
+            min-width: 0;
+            text-align: center;
+            padding: 8px 4px;
+            background: rgba(255,255,255,0.08);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .debug-col .num {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            margin-bottom: 4px;
+        }
+
+        .debug-col .score {
+            font-family: monospace;
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--text);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .debug-col .score.pos { color: #4ade80; }
+        .debug-col .score.neg { color: #f87171; }
+        .debug-col .score.best { color: #fbbf24; }
+        .debug-col .score.x { color: var(--text-dim); opacity: 0.5; }
+
+        .debug-chose {
+            text-align: center;
+            font-size: 0.9rem;
+            padding-top: 8px;
+        }
+
+        .debug-chose span {
+            color: var(--yellow, #fbbf24);
+            font-weight: bold;
+        }
+
+
+        footer {
+            margin-top: 32px;
+            text-align: center;
+            font-size: 0.65rem;
+            color: var(--text-dim);
+            line-height: 1.6;
+        }
+
+        .keys {
+            margin-top: 16px;
+            padding-top: 12px;
+            border-top: 1px solid var(--border);
+            font-size: 0.6rem;
+            opacity: 0.5;
+        }
+
+        .version {
+            margin-top: 8px;
+            font-size: 0.55rem;
+            opacity: 0.4;
+        }
+
+        @media (max-width: 500px) {
+            .settings { flex-direction: column; gap: 10px; }
+            .controls { flex-direction: column; gap: 12px; }
+        }
+    
+        
+
+    </style>
+</head>
+<body>
+    <div class="theme-select">
+        <span>Theme:</span>
+        <select id="theme-dropdown" onchange="window.location.href=this.value">
+            <option value="modern.html">Modern</option>
+            <option value="arcade.html" selected>Arcade</option>
+            <option value="terminal.html">Terminal</option>
+            <option value="neon.html">Neon</option>
+            <option value="paper.html">Paper</option>
+            <option value="midnight.html">Midnight</option>
+            <option value="sunset.html">Sunset</option>
+            <option value="hacker.html">Hacker</option>
+        </select>
+    </div>
+
+    <div class="container">
+        <header>
+            <h1>CONNECT 4</h1>
+            <p class="tagline">POWERED BY LISP AI</p>
+        </header>
+
+        <div class="controls">
+            <button class="btn" id="new-game">New Game</button>
+            <div class="settings" id="settings-row">
+                <div class="setting">
+                    <span>First</span>
+                    <div class="toggle">
+                        <span class="toggle-label active" id="label-you">You</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="ai-first-toggle">
+                            <span class="toggle-knob"></span>
+                        </label>
+                        <span class="toggle-label" id="label-ai">AI</span>
+                    </div>
+                </div>
+                <div class="setting">
+                    <span>Depth</span>
+                    <select id="depth" class="select">
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4" selected>4</option>
+                        <option value="5">5</option>
+                        <option value="6">6</option>
+                        <option value="7">7</option>
+                        <option value="8">8</option>
+                        <option value="9">9</option>
+                        <option value="10">10</option>
+                    </select>
+                </div>
+            <label class="debug-check"><input type="checkbox" id="debug-mode"><span>Debug</span></label></div>
+        </div>
+
+        <div class="board-wrapper">
+            <div class="board" id="board"></div>
+            <div class="columns">
+                <span class="col-num" data-col="0">1</span>
+                <span class="col-num" data-col="1">2</span>
+                <span class="col-num" data-col="2">3</span>
+                <span class="col-num" data-col="3">4</span>
+                <span class="col-num" data-col="4">5</span>
+                <span class="col-num" data-col="5">6</span>
+                <span class="col-num" data-col="6">7</span>
+            </div>
+        </div>
+
+        <div class="status-bar">
+            <span class="status" id="status"><span class="spinner" id="spinner"></span><span id="status-text">Press New Game to start</span></span>
+            <span class="stats" id="stats"></span>
+        </div>
+
+        <div class="legend">
+            <div class="legend-item">
+                <span class="legend-dot player"></span>
+                <span>You (X)</span>
+            </div>
+            <div class="legend-item">
+                <span class="legend-dot ai"></span>
+                <span>AI (O)</span>
+            </div>
+        </div>
+
+        <div class="debug-panel" id="debug-panel">
+            <div class="debug-row"><span>Depth:</span><span id="dbg-depth">-</span></div>
+            <div class="debug-row"><span>Instant Win:</span><span id="dbg-win">-</span></div>
+            <div class="debug-row"><span>Must Block:</span><span id="dbg-block">-</span></div>
+            <div class="debug-scores" id="dbg-scores">
+                <div class="debug-col"><div class="num">1</div><div class="score">-</div></div>
+                <div class="debug-col"><div class="num">2</div><div class="score">-</div></div>
+                <div class="debug-col"><div class="num">3</div><div class="score">-</div></div>
+                <div class="debug-col"><div class="num">4</div><div class="score">-</div></div>
+                <div class="debug-col"><div class="num">5</div><div class="score">-</div></div>
+                <div class="debug-col"><div class="num">6</div><div class="score">-</div></div>
+                <div class="debug-col"><div class="num">7</div><div class="score">-</div></div>
+            </div>
+            <div class="debug-chose">AI Chose: <span id="dbg-chose">-</span></div>
+        </div>
+
+        <footer><footer>
+            <p>Original Lisp engine by Andrew McDonald</p>
+            <p>Minimax with α-β pruning · Heuristic evaluation</p>
+            <p class="keys">1-7 drop · ← → select · enter confirm</p>
+            <p class="version">v3.2</p>
+        </footer>
+    </div>
+
+    <script>
+        // Game state
+        let gameId = null;
+        let gameActive = false;
+        let isProcessing = false;
+        let selectedColumn = 3;
+        let previousBoard = null;
+
+        const statusEl = document.getElementById('status');
+        const statusTextEl = document.getElementById('status-text');
+        const spinnerEl = document.getElementById('spinner');
+        const statsEl = document.getElementById('stats');
+        const depthSelect = document.getElementById('depth');
+        const newGameBtn = document.getElementById('new-game');
+        const settingsRow = document.getElementById('settings-row');
+        const cellElements = [];
+
+        function setStatus(text, showSpinner = false) {
+            statusTextEl.textContent = text;
+            spinnerEl.classList.toggle('active', showSpinner);
+        }
+
+        function initBoard() {
+            const board = document.getElementById('board');
+            board.innerHTML = '';
+            cellElements.length = 0;
+
+            for (let row = 5; row >= 0; row--) {
+                for (let col = 0; col < 7; col++) {
+                    if (!cellElements[col]) cellElements[col] = [];
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.addEventListener('click', () => makeMove(col));
+                    board.appendChild(cell);
+                    cellElements[col][row] = cell;
+                }
+            }
+
+            document.querySelectorAll('.col-num').forEach(el => {
+                el.addEventListener('click', () => makeMove(parseInt(el.dataset.col)));
+            });
+
+            document.addEventListener('keydown', handleKeydown);
+        }
+
+        function clearBoard() {
+            for (let col = 0; col < 7; col++) {
+                for (let row = 0; row < 6; row++) {
+                    if (cellElements[col]?.[row]) {
+                        cellElements[col][row].className = 'cell';
+                    }
+                }
+            }
+            previousBoard = null;
+        }
+
+        function updateBoard(board, aiMoveCol) {
+            if (!board) return;
+
+            for (let col = 0; col < 7; col++) {
+                for (let row = 0; row < 6; row++) {
+                    const cell = cellElements[col][row];
+                    const value = board[col][row];
+                    const prevValue = previousBoard?.[col]?.[row];
+
+                    if (value === 'X') {
+                        if (prevValue !== 'X') {
+                            const dropDistance = -((6 - row) * 58);
+                            cell.style.setProperty('--drop-distance', `${dropDistance}px`);
+                            cell.className = 'cell player dropping';
+                            setTimeout(() => cell.classList.remove('dropping'), 400);
+                        } else {
+                            cell.className = 'cell player';
+                        }
+                    } else if (value === 'O') {
+                        if (prevValue !== 'O') {
+                            const dropDistance = -((6 - row) * 58);
+                            cell.style.setProperty('--drop-distance', `${dropDistance}px`);
+                            cell.className = 'cell ai dropping';
+                            setTimeout(() => cell.classList.remove('dropping'), 400);
+                        } else {
+                            cell.className = 'cell ai';
+                        }
+                    } else {
+                        cell.className = 'cell';
+                    }
+                }
+            }
+
+            previousBoard = JSON.parse(JSON.stringify(board));
+        }
+
+        function highlightWinningCells(cells) {
+            if (!cells?.length) return;
+            setTimeout(() => {
+                cells.forEach(([col, row]) => {
+                    cellElements[col]?.[row]?.classList.add('winning');
+                });
+            }, 300);
+        }
+
+        function updateColumnSelection() {
+            document.querySelectorAll('.col-num').forEach((el, i) => {
+                el.classList.toggle('selected', i === selectedColumn && gameActive);
+            });
+        }
+
+        function handleKeydown(e) {
+            if (e.key >= '1' && e.key <= '7') {
+                if (gameActive) makeMove(parseInt(e.key) - 1);
+                return;
+            }
+            switch(e.key) {
+                case 'ArrowLeft':
+                    e.preventDefault();
+                    selectedColumn = Math.max(0, selectedColumn - 1);
+                    updateColumnSelection();
+                    break;
+                case 'ArrowRight':
+                    e.preventDefault();
+                    selectedColumn = Math.min(6, selectedColumn + 1);
+                    updateColumnSelection();
+                    break;
+                case 'Enter':
+                case ' ':
+                    e.preventDefault();
+                    if (gameActive) makeMove(selectedColumn);
+                    break;
+                case 'n':
+                case 'N':
+                    if (!e.ctrlKey && !e.metaKey) {
+                        newGame(document.getElementById('ai-first-toggle').checked);
+                    }
+                    break;
+            }
+        }
+
+        async function setDepth(depth) {
+            if (!gameId) return;
+            try { await fetch(`/api/set-depth?game_id=${gameId}&depth=${depth}`); } catch {}
+        }
+
+        async function newGame(aiFirst = false) {
+            clearBoard();
+            isProcessing = false;
+            try {
+                const endpoint = aiFirst ? '/api/new-game-ai-first' : '/api/new-game';
+                const res = await fetch(endpoint);
+                const data = await res.json();
+
+                gameId = data.gameId || data['game-id'];
+                gameActive = true;
+                selectedColumn = 3;
+
+                // Update button state
+                newGameBtn.textContent = 'Resign';
+                newGameBtn.classList.add('game-active');
+                settingsRow.classList.add('locked');
+
+                updateBoard(data.board, data.aiMove || data['ai-move']);
+                updateColumnSelection();
+                setStatus(data.message);
+                statusEl.className = 'status';
+                statsEl.textContent = '';
+
+                await setDepth(depthSelect.value);
+                clearDebug();
+                if (aiFirst && data) showDebug(data);
+            } catch {
+                setStatus('Connection error');
+            }
+        }
+
+        function endGame() {
+            gameActive = false;
+            newGameBtn.textContent = 'New Game';
+            newGameBtn.classList.remove('game-active');
+            settingsRow.classList.remove('locked');
+            spinnerEl.classList.remove('active');
+        }
+
+        function findNextEmptyRow(col) {
+            for (let row = 0; row < 6; row++) {
+                const cell = cellElements[col][row];
+                if (!cell.classList.contains('player') && !cell.classList.contains('ai')) {
+                    return row;
+                }
+            }
+            return null;
+        }
+
+        async function makeMove(column) {
+            if (!gameActive || !gameId) {
+                setStatus('Press New Game to start');
+                return;
+            }
+
+            if (isProcessing) return;
+
+            if (cellElements[column][5].classList.contains('player') || 
+                cellElements[column][5].classList.contains('ai')) {
+                return;
+            }
+
+            isProcessing = true;
+
+            const playerRow = findNextEmptyRow(column);
+            if (playerRow !== null) {
+                // Calculate drop distance from top of board
+                const dropDistance = -((6 - playerRow) * 58);
+                cellElements[column][playerRow].style.setProperty('--drop-distance', `${dropDistance}px`);
+                cellElements[column][playerRow].className = 'cell player dropping';
+                setTimeout(() => cellElements[column][playerRow].classList.remove('dropping'), 400);
+                if (!previousBoard) {
+                    previousBoard = Array(7).fill(null).map(() => Array(6).fill(null));
+                }
+                previousBoard[column][playerRow] = 'X';
+            }
+
+            setStatus('AI thinking...', true);
+            const thinkingStartTime = Date.now();
+
+            try {
+                const res = await fetch(`/api/move?game_id=${gameId}&column=${column}`);
+                const data = await res.json();
+
+                if (data.error) {
+                    setStatus(data.error);
+                    if (playerRow !== null) {
+                        cellElements[column][playerRow].className = 'cell';
+                        previousBoard[column][playerRow] = null;
+                    }
+                    return;
+                }
+
+                // Ensure "AI thinking" shows for at least 600ms
+                const elapsed = Date.now() - thinkingStartTime;
+                if (elapsed < 1200) {
+                    await new Promise(r => setTimeout(r, 1200 - elapsed));
+                }
+
+                updateBoard(data.board, data.aiMove || data['ai-move']);
+                setStatus(data.message);
+
+                if (data.evaluations) {
+                    statsEl.textContent = `${data.evaluations.toLocaleString()} positions`;
+                }
+
+                showDebug(data);
+
+                const winningCells = data.winningCells || data['winning-cells'];
+
+                if (data.status === 'player_wins') {
+                    setStatus('You win!');
+                    statusEl.className = 'status win';
+                    endGame();
+                    highlightWinningCells(winningCells);
+                } else if (data.status === 'ai_wins') {
+                    setStatus('AI wins');
+                    statusEl.className = 'status lose';
+                    endGame();
+                    highlightWinningCells(winningCells);
+                } else if (data.status === 'draw') {
+                    setStatus('Draw');
+                    endGame();
+                } else {
+                    statusEl.className = 'status';
+                }
+            } catch {
+                setStatus('Connection error');
+                if (playerRow !== null) cellElements[column][playerRow].className = 'cell';
+            }
+
+            isProcessing = false;
+            updateColumnSelection();
+        }
+
+        // Toggle listeners
+        const toggle = document.getElementById('ai-first-toggle');
+        const labelYou = document.getElementById('label-you');
+        const labelAi = document.getElementById('label-ai');
+
+        toggle.addEventListener('change', () => {
+            labelYou.classList.toggle('active', !toggle.checked);
+            labelAi.classList.toggle('active', toggle.checked);
+        });
+
+        newGameBtn.addEventListener('click', () => {
+            if (gameActive) {
+                endGame();
+                clearDebug();
+                setStatus('Change settings, then click New Game');
+                return;
+            }
+            newGame(toggle.checked);
+        });
+
+        
+        // Debug mode
+        
+        // Debug
+        const dbgToggle = document.getElementById('debug-mode');
+        const dbgPanel = document.getElementById('debug-panel');
+        let dbgOn = false;
+        dbgToggle.addEventListener('change', () => {
+            dbgOn = dbgToggle.checked;
+            dbgPanel.style.display = dbgOn ? 'block' : 'none';
+        });
+        function showDebug(data) {
+            if (!dbgOn) return;
+            document.getElementById('dbg-depth').textContent = depthSelect.value;
+            const win = data['immediate-win'] ?? data.immediateWin;
+            const blk = data['immediate-block'] ?? data.immediateBlock;
+            document.getElementById('dbg-win').textContent = win != null ? `Col ${win+1}` : 'None';
+            document.getElementById('dbg-block').textContent = blk != null ? `Col ${blk+1}` : 'None';
+            const scores = data['ai-scores'] || data.aiScores || [];
+            const chose = data['ai-move'] ?? data.aiMove;
+            const els = document.querySelectorAll('#dbg-scores .debug-col .score');
+            const fmt = (n) => {
+                if (n === null) return 'X';
+                if (n === 50000) return 'WIN';
+                if (n === -50000) return 'LOSS';
+                if (n === 49000) return '49k';
+                if (n === -49000) return '-49k';
+                if (Math.abs(n) >= 10000) return (n > 0 ? '' : '-') + Math.round(Math.abs(n)/1000) + 'k';
+                if (Number.isInteger(n)) return String(n);
+                return n.toFixed(1);
+            };
+            scores.forEach(([c, s]) => {
+                if (els[c]) {
+                    if (s === null) { els[c].textContent = 'X'; els[c].className = 'score x'; }
+                    else {
+                        els[c].textContent = fmt(s);
+                        els[c].className = 'score' + (c === chose ? ' best' : s > 0 ? ' pos' : s < 0 ? ' neg' : '');
+                    }
+                }
+            });
+            document.getElementById('dbg-chose').textContent = chose != null ? `Column ${chose+1}` : '-';
+        }
+        function clearDebug() {
+            ['dbg-depth','dbg-win','dbg-block','dbg-chose'].forEach(id => document.getElementById(id).textContent = '-');
+            document.querySelectorAll('#dbg-scores .score').forEach(e => { e.textContent = '-'; e.className = 'score'; });
+        }
+
+        initBoard();
+    </script>
+</body>
+</html>

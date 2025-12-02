@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connect 4 · Lisp AI</title>
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #000000;
+            --surface: #0a0a0a;
+            --border: #003300;
+            --text: #00ff00;
+            --text-dim: #006600;
+            --green: #00ff00;
+            --dark-green: #003300;
+            --red: #ff0000;
+            --glow: rgba(0, 255, 0, 0.5);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Share Tech Mono', monospace;
+            background: var(--bg);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text);
+            padding: 20px;
+            overflow: hidden;
+        }
+
+        /* Matrix Rain */
+        .matrix-rain {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 0;
+            opacity: 0.15;
+        }
+
+        .rain-column {
+            position: absolute;
+            top: -100%;
+            font-size: 14px;
+            line-height: 1;
+            color: var(--green);
+            text-shadow: 0 0 5px var(--green);
+            animation: fall linear infinite;
+            white-space: nowrap;
+        }
+
+        @keyframes fall {
+            to { transform: translateY(200vh); }
+        }
+
+        .theme-select {
+            position: fixed;
+            top: 16px;
+            right: 16px;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.7rem;
+            color: var(--text-dim);
+        }
+
+        .theme-select select {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.7rem;
+            padding: 4px 8px;
+            background: var(--bg);
+            border: 1px solid var(--green);
+            color: var(--green);
+            cursor: pointer;
+        }
+
+        .theme-select select:hover {
+            box-shadow: 0 0 10px var(--glow);
+        }
+
+        .container {
+            max-width: 500px;
+            width: 100%;
+            position: relative;
+            z-index: 1;
+            background: rgba(0, 0, 0, 0.9);
+            border: 1px solid var(--green);
+            padding: 20px;
+            box-shadow: 0 0 20px var(--glow), inset 0 0 30px rgba(0, 255, 0, 0.03);
+        }
+
+        .container::before {
+            content: '[ CONNECT-4 v3.2 // LISP-AI-ENGINE ]';
+            display: block;
+            font-size: 0.6rem;
+            color: var(--text-dim);
+            margin-bottom: 10px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--dark-green);
+        }
+
+        header {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 1.8rem;
+            letter-spacing: 4px;
+            color: var(--green);
+            text-shadow: 0 0 20px var(--glow), 0 0 40px var(--glow);
+            animation: flicker 4s infinite;
+        }
+
+        @keyframes flicker {
+            0%, 100% { opacity: 1; }
+            96% { opacity: 1; }
+            97% { opacity: 0.8; }
+            98% { opacity: 1; }
+            99% { opacity: 0.9; }
+        }
+
+        .tagline {
+            font-size: 0.7rem;
+            color: var(--text-dim);
+            margin-top: 4px;
+        }
+
+        .tagline::before { content: '// '; }
+
+        .controls {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .btn {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.8rem;
+            padding: 8px 20px;
+            background: var(--bg);
+            border: 1px solid var(--green);
+            color: var(--green);
+            cursor: pointer;
+            transition: all 0.15s;
+            text-transform: uppercase;
+        }
+
+        .btn::before { content: '> '; }
+
+        .btn:hover {
+            background: var(--green);
+            color: var(--bg);
+            box-shadow: 0 0 20px var(--glow);
+        }
+
+        .btn.game-active {
+            background: var(--dark-green);
+            animation: btn-pulse 1.5s infinite;
+        }
+
+        .btn.game-active::before { content: '>> '; }
+
+        @keyframes btn-pulse {
+            0%, 100% { box-shadow: 0 0 10px var(--glow); }
+            50% { box-shadow: 0 0 25px var(--glow); }
+        }
+
+        .settings-row {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            padding: 10px 16px;
+            border: 1px dashed var(--dark-green);
+            transition: opacity 0.3s;
+        }
+
+        .settings-row.locked {
+            opacity: 0.3;
+            pointer-events: none;
+        }
+
+        .settings-row::before {
+            content: '$';
+            color: var(--text-dim);
+        }
+
+        .setting-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .setting-label {
+            font-size: 0.7rem;
+            color: var(--text-dim);
+        }
+
+        .toggle-container {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .toggle-label {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            transition: all 0.2s;
+        }
+
+        .toggle-label.active {
+            color: var(--green);
+            text-shadow: 0 0 5px var(--glow);
+        }
+
+        .toggle-switch {
+            position: relative;
+            width: 40px;
+            height: 20px;
+            cursor: pointer;
+        }
+
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+
+        .toggle-slider {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: var(--bg);
+            border: 1px solid var(--text-dim);
+            transition: all 0.3s;
+        }
+
+        .toggle-slider:before {
+            position: absolute;
+            content: "0";
+            font-size: 10px;
+            height: 14px;
+            width: 14px;
+            left: 2px;
+            bottom: 2px;
+            color: var(--green);
+            text-align: center;
+            line-height: 14px;
+            transition: transform 0.3s;
+        }
+
+        .toggle-switch input:checked + .toggle-slider {
+            border-color: var(--green);
+        }
+
+        .toggle-switch input:checked + .toggle-slider:before {
+            content: "1";
+            transform: translateX(20px);
+            text-shadow: 0 0 5px var(--green);
+        }
+
+        .depth-select {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.75rem;
+            padding: 2px 6px;
+            background: var(--bg);
+            border: 1px solid var(--text-dim);
+            color: var(--green);
+            cursor: pointer;
+        }
+
+        .board-wrapper {
+            border: 1px solid var(--green);
+            padding: 12px;
+            margin-bottom: 12px;
+            position: relative;
+        }
+
+        .board-wrapper::before {
+            content: 'GAME_MATRIX[]';
+            position: absolute;
+            top: -10px;
+            left: 10px;
+            background: var(--bg);
+            padding: 0 6px;
+            font-size: 0.6rem;
+            color: var(--text-dim);
+        }
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 4px;
+            background: var(--surface);
+            padding: 8px;
+        }
+
+        .cell {
+            aspect-ratio: 1;
+            background: var(--bg);
+            border: 1px solid var(--dark-green);
+            cursor: pointer;
+            transition: all 0.15s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+        }
+
+        .cell:hover {
+            border-color: var(--green);
+            box-shadow: 0 0 8px var(--glow);
+        }
+
+        .cell::after { content: '_'; color: var(--dark-green); }
+
+        .cell.player {
+            border-color: var(--red);
+            box-shadow: 0 0 10px rgba(255, 0, 0, 0.5);
+        }
+
+        .cell.player::after {
+            content: 'X';
+            color: var(--red);
+            text-shadow: 0 0 8px var(--red);
+            animation: type-in 0.1s;
+        }
+
+        .cell.ai {
+            border-color: var(--green);
+            box-shadow: 0 0 10px var(--glow);
+        }
+
+        .cell.ai::after {
+            content: 'O';
+            color: var(--green);
+            text-shadow: 0 0 8px var(--green);
+            animation: type-in 0.1s;
+        }
+
+        @keyframes type-in {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .cell.dropping {
+            animation: drop 0.4s ease-in;
+        }
+
+        @keyframes drop {
+            from { transform: translateY(var(--drop-distance, -100px)); opacity: 0.8; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        @keyframes hack-drop {
+            from { transform: translateY(-40px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .cell.winning {
+            animation: hack-pulse 0.4s ease-in-out infinite alternate;
+        }
+
+        @keyframes hack-pulse {
+            to { 
+                transform: scale(1.1);
+                box-shadow: 0 0 20px currentColor;
+            }
+        }
+
+        .columns {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 4px;
+            padding: 0 8px;
+            margin-top: 6px;
+        }
+
+        .col-num {
+            text-align: center;
+            font-size: 0.7rem;
+            color: var(--text-dim);
+            cursor: pointer;
+            padding: 2px;
+            transition: all 0.15s;
+        }
+
+        .col-num::before { content: '['; }
+        .col-num::after { content: ']'; }
+
+        .col-num:hover,
+        .col-num.selected {
+            color: var(--green);
+            text-shadow: 0 0 5px var(--glow);
+        }
+
+        .status-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 12px;
+            border: 1px dashed var(--dark-green);
+            margin-bottom: 12px;
+            font-size: 0.75rem;
+        }
+
+        .status {
+            color: var(--text-dim);
+        }
+
+        .status::before { content: '> '; color: var(--green); }
+
+        .status.win { 
+            color: var(--green); 
+            text-shadow: 0 0 10px var(--glow);
+        }
+
+        .status.win::before { content: '[SUCCESS] '; }
+
+        .status.lose { 
+            color: var(--red);
+            text-shadow: 0 0 10px rgba(255, 0, 0, 0.5);
+        }
+
+        .status.lose::before { content: '[FAILURE] '; }
+
+        .stats {
+            font-size: 0.65rem;
+            color: var(--text-dim);
+        }
+        .spinner {
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(255,255,255,0.2);
+            border-top-color: #00ff00;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            display: none;
+        }
+
+        .spinner.active {
+            display: inline-block;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+
+        .legend {
+            display: flex;
+            justify-content: center;
+            gap: 24px;
+            font-size: 0.7rem;
+            color: var(--text-dim);
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .legend-char {
+            font-size: 0.9rem;
+        }
+
+        .legend-char.player { color: var(--red); text-shadow: 0 0 5px var(--red); }
+        .legend-char.ai { color: var(--green); text-shadow: 0 0 5px var(--green); }
+        /* Debug */
+        .debug-check {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            cursor: pointer;
+            margin-left: 16px;
+        }
+        .debug-check:hover { color: var(--text); }
+        .debug-check input { cursor: pointer; }
+        .settings-row.locked .debug-check { opacity: 1; pointer-events: auto; }
+
+        .debug-panel {
+            display: none;
+            margin-top: 16px;
+            padding: 16px 20px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid var(--accent);
+            border-radius: 10px;
+        }
+
+        .debug-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 12px;
+            margin-bottom: 6px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+
+        .debug-row span:first-child { color: var(--text-dim); }
+        .debug-row span:last-child { color: var(--text); font-weight: 600; }
+
+        .debug-scores {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            margin: 12px 0;
+        }
+
+        .debug-col {
+            flex: 1;
+            min-width: 0;
+            text-align: center;
+            padding: 8px 4px;
+            background: rgba(255,255,255,0.08);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .debug-col .num {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            margin-bottom: 4px;
+        }
+
+        .debug-col .score {
+            font-family: monospace;
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--text);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .debug-col .score.pos { color: #4ade80; }
+        .debug-col .score.neg { color: #f87171; }
+        .debug-col .score.best { color: #fbbf24; }
+        .debug-col .score.x { color: var(--text-dim); opacity: 0.5; }
+
+        .debug-chose {
+            text-align: center;
+            font-size: 0.9rem;
+            padding-top: 8px;
+        }
+
+        .debug-chose span {
+            color: var(--yellow, #fbbf24);
+            font-weight: bold;
+        }
+
+
+        footer {
+            margin-top: 16px;
+            text-align: center;
+            font-size: 0.6rem;
+            color: var(--text-dim);
+            line-height: 1.8;
+            border-top: 1px solid var(--dark-green);
+            padding-top: 12px;
+        }
+
+        footer p::before { content: '// '; }
+
+        .keys {
+            margin-top: 8px;
+            font-size: 0.55rem;
+            opacity: 0.5;
+        }
+
+        .version {
+            margin-top: 4px;
+            font-size: 0.5rem;
+            opacity: 0.4;
+        }
+
+        @media (max-width: 500px) {
+            .settings-row { flex-direction: column; gap: 10px; align-items: flex-start; }
+        }
+    
+        
+
+    </style>
+</head>
+<body>
+    <div class="matrix-rain" id="matrix-rain"></div>
+
+    <div class="theme-select">
+        <span>theme:</span>
+        <select id="theme-dropdown" onchange="window.location.href=this.value">
+            <option value="modern.html">Modern</option>
+            <option value="arcade.html">Arcade</option>
+            <option value="terminal.html">Terminal</option>
+            <option value="neon.html">Neon</option>
+            <option value="paper.html">Paper</option>
+            <option value="midnight.html">Midnight</option>
+            <option value="sunset.html">Sunset</option>
+            <option value="hacker.html" selected>Hacker</option>
+        </select>
+    </div>
+
+    <div class="container">
+        <header>
+            <h1>CONNECT_4</h1>
+            <p class="tagline">minimax alpha-beta engine</p>
+        </header>
+
+        <div class="controls">
+            <button class="btn" id="new-game">init_game()</button>
+            <div class="settings-row" id="settings-row">
+                <div class="setting-group">
+                    <span class="setting-label">first=</span>
+                    <div class="toggle-container">
+                        <span class="toggle-label active" id="label-you">USER</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="ai-first-toggle">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span class="toggle-label" id="label-ai">AI</span>
+                    </div>
+                </div>
+                <div class="setting-group">
+                    <span class="setting-label">depth=</span>
+                    <select id="depth" class="depth-select">
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4" selected>4</option>
+                        <option value="5">5</option>
+                        <option value="6">6</option>
+                        <option value="7">7</option>
+                        <option value="8">8</option>
+                        <option value="9">9</option>
+                        <option value="10">10</option>
+                    </select>
+                </div>
+            <label class="debug-check"><input type="checkbox" id="debug-mode"><span>--debug</span></label></div>
+        </div>
+
+        <div class="board-wrapper">
+            <div class="board" id="board"></div>
+            <div class="columns">
+                <span class="col-num" data-col="0">0</span>
+                <span class="col-num" data-col="1">1</span>
+                <span class="col-num" data-col="2">2</span>
+                <span class="col-num" data-col="3">3</span>
+                <span class="col-num" data-col="4">4</span>
+                <span class="col-num" data-col="5">5</span>
+                <span class="col-num" data-col="6">6</span>
+            </div>
+        </div>
+
+        <div class="status-bar">
+            <span class="status" id="status"><span class="spinner" id="spinner"></span><span id="status-text">awaiting input...</span></span>
+            <span class="stats" id="stats"></span>
+        </div>
+
+        <div class="legend">
+            <div class="legend-item">
+                <span class="legend-char player">X</span>
+                <span>= user</span>
+            </div>
+            <div class="legend-item">
+                <span class="legend-char ai">O</span>
+                <span>= ai</span>
+            </div>
+        </div>
+
+        <div class="debug-panel" id="debug-panel">
+            <div class="debug-row"><span>Depth:</span><span id="dbg-depth">-</span></div>
+            <div class="debug-row"><span>Instant Win:</span><span id="dbg-win">-</span></div>
+            <div class="debug-row"><span>Must Block:</span><span id="dbg-block">-</span></div>
+            <div class="debug-scores" id="dbg-scores">
+                <div class="debug-col"><div class="num">1</div><div class="score">-</div></div>
+                <div class="debug-col"><div class="num">2</div><div class="score">-</div></div>
+                <div class="debug-col"><div class="num">3</div><div class="score">-</div></div>
+                <div class="debug-col"><div class="num">4</div><div class="score">-</div></div>
+                <div class="debug-col"><div class="num">5</div><div class="score">-</div></div>
+                <div class="debug-col"><div class="num">6</div><div class="score">-</div></div>
+                <div class="debug-col"><div class="num">7</div><div class="score">-</div></div>
+            </div>
+            <div class="debug-chose">AI Chose: <span id="dbg-chose">-</span></div>
+        </div>
+
+        <footer><footer>
+            <p>author: andrew_mcdonald</p>
+            <p>algorithm: minimax + α-β pruning</p>
+            <p class="keys">keys: 0-6 drop | ←→ nav | RET exec</p>
+            <p class="version">build: v3.2</p>
+        </footer>
+    </div>
+
+    <script>
+        // Matrix Rain
+        const matrixContainer = document.getElementById('matrix-rain');
+        const chars = 'アイウエオカキクケコサシスセソタチツテト0123456789ABCDEF';
+        for (let i = 0; i < 30; i++) {
+            const column = document.createElement('div');
+            column.className = 'rain-column';
+            column.style.left = (i * 3.5) + '%';
+            column.style.animationDuration = (Math.random() * 10 + 8) + 's';
+            column.style.animationDelay = (Math.random() * 5) + 's';
+            let text = '';
+            for (let j = 0; j < 40; j++) {
+                text += chars[Math.floor(Math.random() * chars.length)] + '<br>';
+            }
+            column.innerHTML = text;
+            matrixContainer.appendChild(column);
+        }
+
+        let gameId = null;
+        let gameActive = false;
+        let isProcessing = false;
+        let selectedColumn = 3;
+        let previousBoard = null;
+
+        const statusEl = document.getElementById('status');
+        const statusTextEl = document.getElementById('status-text');
+        const spinnerEl = document.getElementById('spinner');
+        const statsEl = document.getElementById('stats');
+        const depthSelect = document.getElementById('depth');
+        const newGameBtn = document.getElementById('new-game');
+        const settingsRow = document.getElementById('settings-row');
+        const cellElements = [];
+
+        function setStatus(text, showSpinner = false) {
+            statusTextEl.textContent = text;
+            spinnerEl.classList.toggle('active', showSpinner);
+        }
+
+        function initBoard() {
+            const board = document.getElementById('board');
+            board.innerHTML = '';
+            cellElements.length = 0;
+            for (let row = 5; row >= 0; row--) {
+                for (let col = 0; col < 7; col++) {
+                    if (!cellElements[col]) cellElements[col] = [];
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.addEventListener('click', () => makeMove(col));
+                    board.appendChild(cell);
+                    cellElements[col][row] = cell;
+                }
+            }
+            document.querySelectorAll('.col-num').forEach(el => {
+                el.addEventListener('click', () => makeMove(parseInt(el.dataset.col)));
+            });
+            document.addEventListener('keydown', handleKeydown);
+        }
+
+        function clearBoard() {
+            for (let col = 0; col < 7; col++) {
+                for (let row = 0; row < 6; row++) {
+                    if (cellElements[col]?.[row]) cellElements[col][row].className = 'cell';
+                }
+            }
+            previousBoard = null;
+        }
+
+        function updateBoard(board) {
+            if (!board) return;
+            for (let col = 0; col < 7; col++) {
+                for (let row = 0; row < 6; row++) {
+                    const cell = cellElements[col][row];
+                    const value = board[col][row];
+                    const prevValue = previousBoard?.[col]?.[row];
+                    if (value === 'X') {
+                        if (prevValue !== 'X') {
+                            const dropDistance = -((6 - row) * 58);
+                            cell.style.setProperty('--drop-distance', `${dropDistance}px`);
+                            cell.className = 'cell player dropping';
+                            setTimeout(() => cell.classList.remove('dropping'), 400);
+                        } else { cell.className = 'cell player'; }
+                    } else if (value === 'O') {
+                        if (prevValue !== 'O') {
+                            const dropDistance = -((6 - row) * 58);
+                            cell.style.setProperty('--drop-distance', `${dropDistance}px`);
+                            cell.className = 'cell ai dropping';
+                            setTimeout(() => cell.classList.remove('dropping'), 400);
+                        } else { cell.className = 'cell ai'; }
+                    } else { cell.className = 'cell'; }
+                }
+            }
+            previousBoard = JSON.parse(JSON.stringify(board));
+        }
+
+        function highlightWinningCells(cells) {
+            if (!cells?.length) return;
+            setTimeout(() => { cells.forEach(([col, row]) => cellElements[col]?.[row]?.classList.add('winning')); }, 300);
+        }
+
+        function updateColumnSelection() {
+            document.querySelectorAll('.col-num').forEach((el, i) => {
+                el.classList.toggle('selected', i === selectedColumn && gameActive);
+            });
+        }
+
+        function handleKeydown(e) {
+            if (e.key >= '0' && e.key <= '6') { if (gameActive) makeMove(parseInt(e.key)); return; }
+            switch(e.key) {
+                case 'ArrowLeft': e.preventDefault(); selectedColumn = Math.max(0, selectedColumn - 1); updateColumnSelection(); break;
+                case 'ArrowRight': e.preventDefault(); selectedColumn = Math.min(6, selectedColumn + 1); updateColumnSelection(); break;
+                case 'Enter': case ' ': e.preventDefault(); if (gameActive) makeMove(selectedColumn); break;
+                case 'n': case 'N': if (!e.ctrlKey && !e.metaKey) newGame(document.getElementById('ai-first-toggle').checked); break;
+            }
+        }
+
+        async function setDepth(depth) { if (!gameId) return; try { await fetch(`/api/set-depth?game_id=${gameId}&depth=${depth}`); } catch {} }
+
+        async function newGame(aiFirst = false) {
+            clearBoard();
+            isProcessing = false;
+            try {
+                const res = await fetch(aiFirst ? '/api/new-game-ai-first' : '/api/new-game');
+                const data = await res.json();
+                gameId = data.gameId || data['game-id'];
+                gameActive = true;
+                selectedColumn = 3;
+                newGameBtn.textContent = 'resign()';
+                newGameBtn.classList.add('game-active');
+                settingsRow.classList.add('locked');
+                updateBoard(data.board);
+                updateColumnSelection();
+                setStatus(data.message);
+                statusEl.className = 'status';
+                statsEl.textContent = '';
+                await setDepth(depthSelect.value);
+                clearDebug();
+                if (aiFirst && data) showDebug(data);
+            } catch { setStatus('connection_error'); }
+        }
+
+        function endGame() {
+            gameActive = false;
+            newGameBtn.textContent = 'init_game()';
+            newGameBtn.classList.remove('game-active');
+            settingsRow.classList.remove('locked');
+            spinnerEl.classList.remove('active');
+        }
+
+        function findNextEmptyRow(col) {
+            for (let row = 0; row < 6; row++) {
+                const cell = cellElements[col][row];
+                if (!cell.classList.contains('player') && !cell.classList.contains('ai')) return row;
+            }
+            return null;
+        }
+
+        async function makeMove(column) {
+            if (!gameActive || !gameId) { setStatus('run init_game() first'); return; }
+            if (isProcessing) return;
+
+            if (cellElements[column][5].classList.contains('player') || cellElements[column][5].classList.contains('ai')) return;
+            isProcessing = true;
+            const playerRow = findNextEmptyRow(column);
+            if (playerRow !== null) {
+                // Calculate drop distance from top of board
+                const dropDistance = -((6 - playerRow) * 58);
+                cellElements[column][playerRow].style.setProperty('--drop-distance', `${dropDistance}px`);
+                cellElements[column][playerRow].className = 'cell player dropping';
+                setTimeout(() => cellElements[column][playerRow].classList.remove('dropping'), 400);
+                if (!previousBoard) { previousBoard = Array(7).fill(null).map(() => Array(6).fill(null)); }
+                previousBoard[column][playerRow] = 'X';
+            }
+            setStatus('processing...', true);
+            const thinkingStartTime = Date.now();
+            try {
+                const res = await fetch(`/api/move?game_id=${gameId}&column=${column}`);
+                const data = await res.json();
+                if (data.error) { setStatus(data.error); if (playerRow !== null) { cellElements[column][playerRow].className = 'cell'; previousBoard[column][playerRow] = null; } return; }
+                const elapsed = Date.now() - thinkingStartTime;
+                if (elapsed < 1200) { await new Promise(r => setTimeout(r, 1200 - elapsed)); }
+                updateBoard(data.board);
+                setStatus(data.message);
+                if (data.evaluations) statsEl.textContent = `nodes: ${data.evaluations.toLocaleString()}`;
+                showDebug(data);
+                const winningCells = data.winningCells || data['winning-cells'];
+                if (data.status === 'player_wins') { setStatus('user_wins'); statusEl.className = 'status win'; endGame(); highlightWinningCells(winningCells); }
+                else if (data.status === 'ai_wins') { setStatus('ai_wins'); statusEl.className = 'status lose'; endGame(); highlightWinningCells(winningCells); }
+                else if (data.status === 'draw') { setStatus('draw'); endGame(); }
+                else { statusEl.className = 'status'; }
+            } catch { setStatus('connection_error'); if (playerRow !== null) cellElements[column][playerRow].className = 'cell'; }
+            isProcessing = false;
+            updateColumnSelection();
+        }
+
+        const toggle = document.getElementById('ai-first-toggle');
+        const labelYou = document.getElementById('label-you');
+        const labelAi = document.getElementById('label-ai');
+        toggle.addEventListener('change', () => { labelYou.classList.toggle('active', !toggle.checked); labelAi.classList.toggle('active', toggle.checked); });
+        newGameBtn.addEventListener('click', () => {
+            if (gameActive) { endGame(); clearDebug(); setStatus('modify params, then run init_game()'); return; }
+            newGame(toggle.checked);
+        });
+        
+        // Debug mode
+        
+        // Debug
+        const dbgToggle = document.getElementById('debug-mode');
+        const dbgPanel = document.getElementById('debug-panel');
+        let dbgOn = false;
+        dbgToggle.addEventListener('change', () => {
+            dbgOn = dbgToggle.checked;
+            dbgPanel.style.display = dbgOn ? 'block' : 'none';
+        });
+        function showDebug(data) {
+            if (!dbgOn) return;
+            document.getElementById('dbg-depth').textContent = depthSelect.value;
+            const win = data['immediate-win'] ?? data.immediateWin;
+            const blk = data['immediate-block'] ?? data.immediateBlock;
+            document.getElementById('dbg-win').textContent = win != null ? `Col ${win+1}` : 'None';
+            document.getElementById('dbg-block').textContent = blk != null ? `Col ${blk+1}` : 'None';
+            const scores = data['ai-scores'] || data.aiScores || [];
+            const chose = data['ai-move'] ?? data.aiMove;
+            const els = document.querySelectorAll('#dbg-scores .debug-col .score');
+            const fmt = (n) => {
+                if (n === null) return 'X';
+                if (n === 50000) return 'WIN';
+                if (n === -50000) return 'LOSS';
+                if (n === 49000) return '49k';
+                if (n === -49000) return '-49k';
+                if (Math.abs(n) >= 10000) return (n > 0 ? '' : '-') + Math.round(Math.abs(n)/1000) + 'k';
+                if (Number.isInteger(n)) return String(n);
+                return n.toFixed(1);
+            };
+            scores.forEach(([c, s]) => {
+                if (els[c]) {
+                    if (s === null) { els[c].textContent = 'X'; els[c].className = 'score x'; }
+                    else {
+                        els[c].textContent = fmt(s);
+                        els[c].className = 'score' + (c === chose ? ' best' : s > 0 ? ' pos' : s < 0 ? ' neg' : '');
+                    }
+                }
+            });
+            document.getElementById('dbg-chose').textContent = chose != null ? `Column ${chose+1}` : '-';
+        }
+        function clearDebug() {
+            ['dbg-depth','dbg-win','dbg-block','dbg-chose'].forEach(id => document.getElementById(id).textContent = '-');
+            document.querySelectorAll('#dbg-scores .score').forEach(e => { e.textContent = '-'; e.className = 'score'; });
+        }
+
+        initBoard();
+    </script>
+</body>
+</html>
