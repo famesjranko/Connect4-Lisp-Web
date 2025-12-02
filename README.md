@@ -138,7 +138,7 @@ connect4-lisp/
 │   ├── sunset.html          # Sunset theme
 │   └── hacker.html          # Hacker theme
 ├── images/
-│   └── screenshot.jpg       # Game screenshot
+│   └── screenshot-1.jpg     # Game screenshot
 ├── web-server.lisp          # HTTP API layer (Hunchentoot)
 ├── Dockerfile
 ├── docker-compose.yml
@@ -208,9 +208,10 @@ The AI uses minimax with alpha-beta pruning and a custom heuristic. You can adju
 - **Depth 7+**: Very hard (may be slow on complex boards)
 
 The heuristic evaluates:
-- **Positional value**: Center columns weighted higher
+- **Positional value**: Center columns weighted higher via a strategy value map
 - **Threat detection**: Imminent win/loss detection
-- **Defensive weighting**: Tuned to prioritize blocking
+- **Defensive weighting**: Tuned to prioritize blocking over risky attacks at shallow depths
+- **Diagonal strategy**: Extra weight for diagonal win potential
 
 ## Controls
 
