@@ -39,7 +39,7 @@ This enables true horizontal scaling without sticky sessions.
 
 ## Quick Start
 
-### Using Docker (Recommended)
+### Using Docker (Local)
 
 ```bash
 # Build and run
@@ -51,19 +51,6 @@ docker run -p 8080:8080 connect4-lisp
 ```
 
 Open http://localhost:8080 in your browser.
-
-### Docker Compose with Replicas
-
-```yaml
-version: '3.8'
-services:
-  connect4:
-    build: .
-    deploy:
-      replicas: 3
-    ports:
-      - "8080:8080"
-```
 
 ### Cloud Deployment (Railway / Render / Fly.io / Cloud Run)
 
