@@ -4,7 +4,7 @@
 
 ## Overview
 
-This project adds a modern web interface to my original [Connect4-Heuristic-Player](https://github.com/famesjranko/Connect4-Heuristic-Player) Lisp implementation from university. The original game logic, minimax algorithm, and heuristic evaluation remain **completely unchanged** - I've simply added an HTTP API layer on top.
+This project adds a LISP backend web interface to my original [Connect4-Heuristic-Player](https://github.com/famesjranko/Connect4-Heuristic-Player) Lisp implementation from university. The original game logic, minimax algorithm, and heuristic evaluation remain **completely unchanged** - I've simply added an HTTP API layer on top.
 
 ### Architecture
 
@@ -29,7 +29,6 @@ This project adds a modern web interface to my original [Connect4-Heuristic-Play
 
 ### Stateless Design
 
-Unlike traditional session-based game servers:
 - **Client stores board state** in JavaScript
 - **Each request includes full board state** via POST body
 - **No game IDs or server-side storage**
