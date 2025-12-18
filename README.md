@@ -195,9 +195,8 @@ You can adjust the search depth:
 ### Heuristic Evaluation
 
 The heuristic evaluates board positions by scoring all possible four-in-a-row lines
-based on piece occupancy and whether a line is blocked by the opponent.  
-The final score reflects the relative strength of the AI’s potential connections
-minus the opponent’s.
+based on piece occupancy and whether a line is blocked by the opponent. The final
+score reflects the relative strength of the AI’s potential connections minus the opponent’s.
 
 This pattern-based approach implicitly favors:
 
