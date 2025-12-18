@@ -184,18 +184,29 @@ connect4-lisp/
 
 ## AI Configuration
 
-The AI uses minimax with alpha-beta pruning and a custom heuristic. You can adjust the search depth:
+The AI uses minimax with alpha-beta pruning and a custom heuristic evaluation function.
+You can adjust the search depth:
 
-- **Depth 1-2**: Easy (fast, not very strategic)
+- **Depth 1-2**: Easy (fast, limited lookahead)
 - **Depth 3-4**: Medium (good balance, default is 4)
-- **Depth 5-6**: Hard (slower, very strategic)
-- **Depth 7+**: Very hard (may be slow on complex boards)
+- **Depth 5-6**: Hard (slower, strong tactical play)
+- **Depth 7+**: Very hard (computationally expensive on complex boards)
 
-The heuristic evaluates:
-- **Positional value**: Center columns weighted higher via a strategy value map
-- **Threat detection**: Imminent win/loss detection
-- **Defensive weighting**: Tuned to prioritize blocking over risky attacks at shallow depths
-- **Diagonal strategy**: Extra weight for diagonal win potential
+### Heuristic Evaluation
+
+The heuristic evaluates board positions by scoring all possible four-in-a-row lines
+based on piece occupancy and whether a line is blocked by the opponent.  
+The final score reflects the relative strength of the AI’s potential connections
+minus the opponent’s.
+
+This pattern-based approach implicitly favors:
+
+- **Central control** — more potential winning lines pass through the center columns
+- **Threat detection** — three-in-a-row and immediate win/loss patterns receive high weight
+- **Defensive play** — opponent threats reduce the overall evaluation score
+- **Diagonal strategy** — diagonal, horizontal, and vertical lines are evaluated uniformly
+
+No solved game database, opening book, or endgame tablebase is used.
 
 ## Controls
 
