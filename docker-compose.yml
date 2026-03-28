@@ -6,6 +6,7 @@ services:
     restart: unless-stopped
     environment:
       - LISP_AI_DEPTH=4
+      - LISP_AI_MAX_DEPTH=8
     # Uncomment for development - allows editing static files without rebuilding
     # volumes:
     #   - ./static:/app/static:ro

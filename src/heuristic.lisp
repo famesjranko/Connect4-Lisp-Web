@@ -7,13 +7,12 @@
 ;;;; =====================================================
 
 ;;; Forward declarations to suppress compiler warnings
-(declaim (ftype function heuristic board-value strategy line-score sum
+(declaim (ftype function heuristic board-value strategy line-score
                 imminent-threat? playable-positions best-strategy?
                 preferred-positions strategy-eval? preferred-position-score))
 (defvar *default-board-values* nil)
 (defvar *strategy-a* nil)
 (defvar *strategy-b* nil)
-(defvar *board-positions-template* nil)
 (defvar *strategy-board-template* nil)
 
 ;;; =========
@@ -47,10 +46,11 @@
 ;; 2. board-value is weighted toward defensive play.
 
 (defun heuristic (board player)
-  (- (+ (* *defensive-weight* (board-value board player))
-        (strategy board player))
-     (+ (board-value board (opposite player))
-        (strategy board (opposite player)))))
+  (let ((playable (playable-positions board)))
+    (- (+ (* *defensive-weight* (board-value board player playable))
+          (strategy board player))
+       (+ (board-value board (opposite player) playable)
+          (strategy board (opposite player))))))
 
 ;;; =================
 ;;; HEURISTIC HELPERS
@@ -60,8 +60,9 @@
 ;; of possible win combinations onto the function threat and returns the
 ;; sum of each evaluation.
 
-(defun board-value (board player)
-  (sum (mapcar #'(lambda(x) (line-score board player x)) *all-c4-lines*)))
+(defun board-value (board player playable)
+  (loop for line in *all-c4-lines*
+        sum (line-score board player line playable)))
 
 ;; LINE-SCORE takes a board, a player, and a line containing a possible win
 ;; combination and returns a value for current board depending on how many
@@ -75,14 +76,13 @@
 ;;          1 if current playable move in line is a possible unblocked two move.
 ;;          0 default.
 
-(defun line-score (board player line)
-  (let* ((1st (nth (second (first line)) (nth (first (first line)) board)))
-         (2nd (nth (second (second line)) (nth (first (second line)) board)))
-         (3rd (nth (second (third line)) (nth (first (third line)) board)))
-         (4th (nth (second (fourth line)) (nth (first (fourth line)) board)))
+(defun line-score (board player line playable)
+  (let* ((1st (aref board (first (first line)) (second (first line))))
+         (2nd (aref board (first (second line)) (second (second line))))
+         (3rd (aref board (first (third line)) (second (third line))))
+         (4th (aref board (first (fourth line)) (second (fourth line))))
          (combo (list 1st 2nd 3rd 4th))
          (pieces (count player combo))
-         (playable (playable-positions board))
          (imminent (imminent-threat? line playable))
          (not-blocked (not (member (opposite player) combo))))
     (cond ((and (= pieces 3)
@@ -103,94 +103,67 @@
                 imminent) 0)
           (t 0))))
 
-;; IMMINENT-THREAT? takes two lists as input, line and playable. Line contains
-;; a list of a possible win combination and playable contains a list of the
-;; current open moves available for the board. Possible win combination is mapped
-;; to playable and if equal returns true. Meaning, that the current possible win
-;; combo is within the range of next possible moves.
+;; IMMINENT-THREAT? takes a line and playable (simple-vector of 7 row indices).
+;; Returns true if any position in the line is the next playable row in its column.
 
 (defun imminent-threat? (line playable)
-  (let ((playable1 (nth (first (first line)) playable))
-        (playable2 (nth (first (second line)) playable))
-        (playable3 (nth (first (third line)) playable))
-        (playable4 (nth (first (fourth line)) playable)))
-    (cond ((eql (second (first line)) (second playable1)))
-          ((eql (second (second line)) (second playable2)))
-          ((eql (second (third line)) (second playable3)))
-          ((eql (second (fourth line)) (second playable4))))))
+  (let ((p1 (svref playable (first (first line))))
+        (p2 (svref playable (first (second line))))
+        (p3 (svref playable (first (third line))))
+        (p4 (svref playable (first (fourth line)))))
+    (cond ((eql (second (first line)) p1))
+          ((eql (second (second line)) p2))
+          ((eql (second (third line)) p3))
+          ((eql (second (fourth line)) p4)))))
 
 ;; STRATEGY takes a board and a player as inputs and tests function BEST-STRATEGY?
 ;; to determine best current strategy and applies relevant board values.
 
 (defun strategy (board player)
-  (cond ((> (best-strategy? board player) 3)
-         (preferred-positions board player *strategy-a*))
-        ((< (best-strategy? board player) -3)
-         (preferred-positions board player *strategy-b*))
-        (t (preferred-positions board player *default-board-values*))))
+  (let ((bs (best-strategy? board player)))
+    (cond ((> bs 3)
+           (preferred-positions board player *strategy-a*))
+          ((< bs -3)
+           (preferred-positions board player *strategy-b*))
+          (t (preferred-positions board player *default-board-values*)))))
 
 ;; BEST-STRATEGY takes a board and a player as inputs and maps the current board
 ;; state against the strategy board template. Returns relative strategy value of
 ;; state for player.
 
 (defun best-strategy? (board player)
-  (sum (mapcar #'(lambda(x) (strategy-eval? board player *strategy-board-template* x))
-               *board-positions-template*)))
+  (let ((sum 0))
+    (dotimes (col 7 sum)
+      (dotimes (row 6)
+        (let ((pos (aref board col row))
+              (strat (aref *strategy-board-template* col row)))
+          (when (eql pos player)
+            (cond ((eql strat 'a) (incf sum))
+                  ((eql strat 'b) (decf sum)))))))))
 
-;; STRATEGY-EVAL? takes a board, player, a strategy board template, and a board
-;; positions template as inputs and checks the players positions against the the
-;; strategy template. Returns a relative weight value +1 or -1 for each player
-;; pieces on given strategy position.
-
-(defun strategy-eval? (board player strategy column)
-  (let ((pos (nth (second column) (nth (first column) board)))
-        (strat (nth (second column) (nth (first column) strategy))))
-    (cond ((and (eql strat 'a) (eql pos player)) 1)
-          ((and (eql strat 'b) (eql pos player)) -1)
-          (t 0))))
-
-;; PREFERRED-POSITIONS takes a board, player, and list representing board position
-;; values and is mapped onto function preferred-position? using a list representing
-;; board co-ordinates. Returns a relative value for players positions on board.
+;; PREFERRED-POSITIONS takes a board, player, and array of board position
+;; values. Returns a relative value for players positions on board.
 
 (defun preferred-positions (board player board-values)
-  (sum (mapcar #'(lambda(x) (preferred-position-score board player board-values x))
-               *board-positions-template*)))
-
-;; PREFERRED-POSITION-SCORE takes a board, player, board-values, and a board position,
-;; checks if player has piece has a on board-position; if yes, returns the relevant
-;; position value from board-values.
-
-(defun preferred-position-score (board player board-values pos)
-  (let ((play-position (nth (second pos) (nth (first pos) board)))
-        (val (nth (second pos) (nth (first pos) board-values))))
-    (if (eql play-position player) val 0)))
+  (let ((sum 0))
+    (dotimes (col 7 sum)
+      (dotimes (row 6)
+        (when (eql (aref board col row) player)
+          (incf sum (aref board-values col row)))))))
 
 ;;; ===============
 ;;; HEURISTIC UTILS
 ;;; ===============
 
-;; Function PLAYABLE-POSITIONS takes a list representing a board and returns a list
-;; containing the positions of the first nil elements of the board.
+;; Function PLAYABLE-POSITIONS takes a board (2D array) and returns a
+;; simple-vector of 7 elements, each being the next blank row in that
+;; column (or nil if the column is full).
 
 (defun playable-positions (board)
-  (mapcar #'list
-          '(0 1 2 3 4 5 6)
-          (list (position nil (first board))
-                (position nil (second board))
-                (position nil (third board))
-                (position nil (fourth board))
-                (position nil (fifth board))
-                (position nil (sixth board))
-                (position nil (seventh board)))))
-
-;; Function SUM takes a list of numbers and returns the sum of the elements of the
-;; list.
-
-(defun sum(lis)
-  (cond ((null lis) 0)
-        (t (+ (car lis)
-              (sum (cdr lis))))))
+  (let ((pp (make-array 7)))
+    (dotimes (col 7 pp)
+      (setf (svref pp col)
+            (get-next-blank board col)))))
 
 ;;; ================================
 ;;; BOARD VALUES/POSITIONS TEMPLATES
@@ -201,59 +174,51 @@
 
 (defparameter *default-board-values* ; best!
   ; relative board strategy values
-  '((1 1 1 1 1 1)
-    (2 1 1 1 1 1)
-    (2 1 1 1 1 1)
-    (3 3 3 1 1 1)
-    (2 1 1 1 1 1)
-    (2 1 1 1 1 1)
-    (1 1 1 1 1 1)))
+  (make-array '(7 6) :initial-contents
+    '((1 1 1 1 1 1)
+      (2 1 1 1 1 1)
+      (2 1 1 1 1 1)
+      (3 3 3 1 1 1)
+      (2 1 1 1 1 1)
+      (2 1 1 1 1 1)
+      (1 1 1 1 1 1))))
 
 ;; *STRATEGY-A* is a value template for game board position values
 ;; for strategic play.
 
 (defparameter *strategy-a*
-  '((0 1 0 1 0 1)
-    (1 0 1 0 1 0)
-    (0 1 0 1 0 1)
-    (1 0 1 0 1 0)
-    (0 1 0 1 0 1)
-    (1 0 1 0 1 0)
-    (0 1 0 1 0 1)))
+  (make-array '(7 6) :initial-contents
+    '((0 1 0 1 0 1)
+      (1 0 1 0 1 0)
+      (0 1 0 1 0 1)
+      (1 0 1 0 1 0)
+      (0 1 0 1 0 1)
+      (1 0 1 0 1 0)
+      (0 1 0 1 0 1))))
 
 ;; *STRATEGY-B* is a value template for game board position values
 ;; for strategic play.
 
 (defparameter *strategy-b*
-  '((1 0 1 0 1 0)
-    (0 1 0 1 0 1)
-    (1 0 1 0 1 0)
-    (0 1 0 1 0 1)
-    (1 0 1 0 1 0)
-    (0 1 0 1 0 1)
-    (1 0 1 0 1 0)))
+  (make-array '(7 6) :initial-contents
+    '((1 0 1 0 1 0)
+      (0 1 0 1 0 1)
+      (1 0 1 0 1 0)
+      (0 1 0 1 0 1)
+      (1 0 1 0 1 0)
+      (0 1 0 1 0 1)
+      (1 0 1 0 1 0))))
 
 ;; *STRATEGY-BOARD-TEMPLATE* represents two distinct strategy
 ;; position templates for the game board.
 
 (defparameter *strategy-board-template*
   ; board strategy template
-  '((b a b a b a)
-    (a b a b a b)
-    (b a b a b a)
-    (a b a b a b)
-    (b a b a b a)
-    (a b a b a b)
-    (b a b a b a)))
-
-;; *board-positions-template* is a list of the board positions relative
-;; to their position within the array.
-
-(defparameter *board-positions-template*
-  '((0 0)(0 1)(0 2)(0 3)(0 4)(0 5)
-    (1 0)(1 1)(1 2)(1 3)(1 4)(1 5)
-    (2 0)(2 1)(2 2)(2 3)(2 4)(2 5)
-    (3 0)(3 1)(3 2)(3 3)(3 4)(3 5)
-    (4 0)(4 1)(4 2)(4 3)(4 4)(4 5)
-    (5 0)(5 1)(5 2)(5 3)(5 4)(5 5)
-    (6 0)(6 1)(6 2)(6 3)(6 4)(6 5)))
+  (make-array '(7 6) :initial-contents
+    '((b a b a b a)
+      (a b a b a b)
+      (b a b a b a)
+      (a b a b a b)
+      (b a b a b a)
+      (a b a b a b)
+      (b a b a b a))))
