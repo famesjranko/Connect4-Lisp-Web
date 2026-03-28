@@ -4,7 +4,7 @@
 
 ## Overview
 
-This project adds a modern web interface to my original [Connect4-Heuristic-Player](https://github.com/famesjranko/Connect4-Heuristic-Player) Lisp implementation from university. The original game logic, minimax algorithm, and heuristic evaluation remain **completely unchanged** - I've simply added an HTTP API layer on top.
+This project adds a modern web interface to my original [Connect4-Heuristic-Player](https://github.com/famesjranko/Connect4-Heuristic-Player) Lisp implementation from university. The original heuristic evaluation logic is preserved, while the underlying data structures and search have been optimised for performance (array-based board, transposition table, parallel search).
 
 ### Architecture
 
@@ -20,9 +20,9 @@ This project adds a modern web interface to my original [Connect4-Heuristic-Play
 └────┬────┴────┬────┴────┬────┘
      │         │         │
 ┌────▼─────────▼─────────▼────┐
-│     Original Lisp Code      │
-│  ├─ minimax.lisp            │  ← Minimax with α-β pruning  
-│  ├─ connect-4.lisp          │  ← Game logic & board
+│     Lisp AI Engine           │
+│  ├─ minimax.lisp            │  ← α-β pruning + transposition table
+│  ├─ connect-4.lisp          │  ← Game logic + Zobrist hashing
 │  └─ heuristic.lisp          │  ← AI evaluation function
 └─────────────────────────────┘
 ```
@@ -73,13 +73,16 @@ sbcl --load web-server.lisp
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PORT` | 8080 | Server port |
+| `LISP_AI_DEPTH` | 3 | Default AI search depth |
+| `LISP_AI_MAX_DEPTH` | 6 | Maximum allowed search depth |
+| `LISP_AI_THREADS` | 4 | Worker threads for parallel search |
 
 ## Features
 
 - **Horizontally scalable** - no server-side session state
 - **Theme picker** - 8 themes from minimal to retro arcade
 - **Keyboard support**: Press 1-7 to drop pieces, arrow keys to select, Enter to confirm
-- **Adjustable AI difficulty** (depth 1-10)
+- **Adjustable AI difficulty** (depth 1-8)
 - **Debug mode** - see AI's move analysis and scores
 - **Winning line highlighting** when game ends
 - **Non-root Docker** container for security
@@ -185,18 +188,25 @@ connect4-lisp/
 
 ## AI Configuration
 
-The AI uses minimax with alpha-beta pruning and a custom heuristic. You can adjust the search depth:
+The AI uses minimax with alpha-beta pruning, a transposition table, and parallel root-level search. You can adjust the search depth:
 
 - **Depth 1-2**: Easy (fast, not very strategic)
 - **Depth 3-4**: Medium (good balance, default is 4)
-- **Depth 5-6**: Hard (slower, very strategic)
-- **Depth 7+**: Very hard (may be slow on complex boards)
+- **Depth 5-6**: Hard (very strategic)
+- **Depth 7-8**: Very hard (strongest play, sub-second response)
 
 The heuristic evaluates:
 - **Positional value**: Center columns weighted higher via a strategy value map
 - **Threat detection**: Imminent win/loss detection
 - **Defensive weighting**: Tuned to prioritize blocking over risky attacks at shallow depths
 - **Diagonal strategy**: Extra weight for diagonal win potential
+
+### Performance Optimisations
+
+- **Array-based board**: 2D array with O(1) cell access replaces nested lists
+- **Transposition table**: Zobrist hashing with 1M-entry cache avoids re-evaluating positions reached via different move orders
+- **Parallel search**: Root-level moves evaluated concurrently via lparallel (first move searched sequentially to establish alpha-beta bound)
+- **Reduced allocations**: Move generation returns column indices instead of full board copies; intermediate list allocations eliminated
 
 ## Controls
 
@@ -214,6 +224,7 @@ The heuristic evaluates:
 - **Lisp Implementation**: SBCL (Steel Bank Common Lisp)
 - **Web Server**: Hunchentoot
 - **JSON Handling**: cl-json
+- **Parallelism**: lparallel
 - **Frontend**: Vanilla HTML/CSS/JS (no frameworks)
 - **Container**: Debian Bookworm slim base (non-root)
 
@@ -221,9 +232,10 @@ The heuristic evaluates:
 
 - Stateless design eliminates session-related vulnerabilities
 - No server-side memory accumulation
+- Per-request transposition tables for thread-safe concurrent handling
 - Non-root container execution
 - Cached DOM references in frontend
-- Input validation on all endpoints
+- Input validation on all endpoints (board shape, column range, depth clamping)
 
 ## Credits
 
