@@ -20,11 +20,11 @@ This project adds a modern web interface to my original [Connect4-Heuristic-Play
 └────┬────┴────┬────┴────┬────┘
      │         │         │
 ┌────▼─────────▼─────────▼────┐
-│        Redis                 │  ← Game state, slot management, TTL expiry
+│        Redis                │  ← Game state, slot management, TTL expiry
 └─────────────────────────────┘
      │         │         │
 ┌────▼─────────▼─────────▼────┐
-│     Lisp AI Engine           │
+│     Lisp AI Engine          │
 │  ├─ minimax.lisp            │  ← α-β pruning + transposition table
 │  ├─ connect-4.lisp          │  ← Game logic + Zobrist hashing
 │  └─ heuristic.lisp          │  ← AI evaluation function
