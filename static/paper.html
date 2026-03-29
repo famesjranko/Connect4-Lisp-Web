@@ -403,6 +403,37 @@
 
         .legend-char.player { color: var(--red); }
         .legend-char.ai { color: var(--blue); }
+
+        .slot-indicator {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.7rem;
+            color: var(--text-dim);
+        }
+
+        .slot-indicator .slot-count {
+            font-weight: 600;
+        }
+
+        .slot-indicator .slot-count.slots-full {
+            color: var(--coral, #f87171);
+        }
+
+        .slot-refresh {
+            background: none;
+            border: none;
+            color: var(--text-dim);
+            cursor: pointer;
+            font-size: 0.8rem;
+            padding: 2px;
+            line-height: 1;
+            transition: transform 0.3s;
+        }
+
+        .slot-refresh:hover { color: var(--text); }
+        .slot-refresh.refreshing { animation: spin 0.6s linear; }
+
         /* Debug Section */
         /* Debug */
         .debug-check {
@@ -608,6 +639,10 @@
                 <span class="legend-char ai">○</span>
                 <span>AI</span>
             </div>
+            <div class="slot-indicator">
+                <span class="slot-count" id="slot-count">--/-- slots</span>
+                <button class="slot-refresh" id="slot-refresh" title="Refresh slot count">&#x21bb;</button>
+            </div>
         </div>
 
         <div class="debug-panel" id="debug-panel">
@@ -634,243 +669,6 @@
         </footer>
     </div>
 
-    <script>
-        let boardState = null;
-        let gameActive = false;
-        let isProcessing = false;
-        let selectedColumn = 3;
-        let previousBoard = null;
-
-        const statusEl = document.getElementById('status');
-        const statusTextEl = document.getElementById('status-text');
-        const spinnerEl = document.getElementById('spinner');
-        const statsEl = document.getElementById('stats');
-        const depthSelect = document.getElementById('depth');
-        const newGameBtn = document.getElementById('new-game');
-        const settingsRow = document.getElementById('settings-row');
-        const cellElements = [];
-
-        function setStatus(text, showSpinner = false) {
-            statusTextEl.textContent = text;
-            spinnerEl.classList.toggle('active', showSpinner);
-        }
-
-        function initBoard() {
-            const board = document.getElementById('board');
-            board.innerHTML = '';
-            cellElements.length = 0;
-            for (let row = 5; row >= 0; row--) {
-                for (let col = 0; col < 7; col++) {
-                    if (!cellElements[col]) cellElements[col] = [];
-                    const cell = document.createElement('div');
-                    cell.className = 'cell';
-                    cell.addEventListener('click', () => makeMove(col));
-                    board.appendChild(cell);
-                    cellElements[col][row] = cell;
-                }
-            }
-            document.querySelectorAll('.col-num').forEach(el => {
-                el.addEventListener('click', () => makeMove(parseInt(el.dataset.col)));
-            });
-            document.addEventListener('keydown', handleKeydown);
-        }
-
-        function clearBoard() {
-            for (let col = 0; col < 7; col++) {
-                for (let row = 0; row < 6; row++) {
-                    if (cellElements[col]?.[row]) cellElements[col][row].className = 'cell';
-                }
-            }
-            previousBoard = null;
-        }
-
-        function updateBoard(board) {
-            if (!board) return;
-            for (let col = 0; col < 7; col++) {
-                for (let row = 0; row < 6; row++) {
-                    const cell = cellElements[col][row];
-                    const value = board[col][row];
-                    const prevValue = previousBoard?.[col]?.[row];
-                    if (value === 'X') {
-                        if (prevValue !== 'X') {
-                            const dropDistance = -((6 - row) * 58);
-                            cell.style.setProperty('--drop-distance', `${dropDistance}px`);
-                            cell.className = 'cell player dropping';
-                            setTimeout(() => cell.classList.remove('dropping'), 400);
-                        } else { cell.className = 'cell player'; }
-                    } else if (value === 'O') {
-                        if (prevValue !== 'O') {
-                            const dropDistance = -((6 - row) * 58);
-                            cell.style.setProperty('--drop-distance', `${dropDistance}px`);
-                            cell.className = 'cell ai dropping';
-                            setTimeout(() => cell.classList.remove('dropping'), 400);
-                        } else { cell.className = 'cell ai'; }
-                    } else { cell.className = 'cell'; }
-                }
-            }
-            previousBoard = JSON.parse(JSON.stringify(board));
-        }
-
-        function highlightWinningCells(cells) {
-            if (!cells?.length) return;
-            setTimeout(() => { cells.forEach(([col, row]) => cellElements[col]?.[row]?.classList.add('winning')); }, 300);
-        }
-
-        function updateColumnSelection() {
-            document.querySelectorAll('.col-num').forEach((el, i) => {
-                el.classList.toggle('selected', i === selectedColumn && gameActive);
-            });
-        }
-
-        function handleKeydown(e) {
-            if (e.key >= '1' && e.key <= '7') { if (gameActive) makeMove(parseInt(e.key) - 1); return; }
-            switch(e.key) {
-                case 'ArrowLeft': e.preventDefault(); selectedColumn = Math.max(0, selectedColumn - 1); updateColumnSelection(); break;
-                case 'ArrowRight': e.preventDefault(); selectedColumn = Math.min(6, selectedColumn + 1); updateColumnSelection(); break;
-                case 'Enter': case ' ': e.preventDefault(); if (gameActive) makeMove(selectedColumn); break;
-                case 'n': case 'N': if (!e.ctrlKey && !e.metaKey) newGame(document.getElementById('ai-first-toggle').checked); break;
-            }
-        }
-
-        // Depth is now sent with each move request - no separate setDepth needed
-
-        async function newGame(aiFirst = false) {
-            clearBoard();
-            isProcessing = false;
-            try {
-                const res = await fetch(aiFirst ? `/api/new-game-ai-first?depth=${depthSelect.value}` : '/api/new-game');
-                const data = await res.json();
-                boardState = data.board;
-                gameActive = true;
-                selectedColumn = 3;
-                newGameBtn.textContent = 'Resign';
-                newGameBtn.classList.add('game-active');
-                settingsRow.classList.add('locked');
-                updateBoard(data.board);
-                updateColumnSelection();
-                setStatus(data.message);
-                statusEl.className = 'status';
-                statsEl.textContent = '';
-                clearDebug();
-                if (aiFirst && data) showDebug(data);
-            } catch { setStatus('Connection error'); }
-        }
-
-        function endGame() {
-            gameActive = false;
-            newGameBtn.textContent = 'New Game!';
-            newGameBtn.classList.remove('game-active');
-            settingsRow.classList.remove('locked');
-            spinnerEl.classList.remove('active');
-        }
-
-        function findNextEmptyRow(col) {
-            for (let row = 0; row < 6; row++) {
-                const cell = cellElements[col][row];
-                if (!cell.classList.contains('player') && !cell.classList.contains('ai')) return row;
-            }
-            return null;
-        }
-
-        async function makeMove(column) {
-            if (!gameActive || !boardState) { setStatus('Press New Game to start'); return; }
-            if (isProcessing) return;
-
-            if (cellElements[column][5].classList.contains('player') || cellElements[column][5].classList.contains('ai')) return;
-            isProcessing = true;
-            const playerRow = findNextEmptyRow(column);
-            if (playerRow !== null) {
-                // Calculate drop distance from top of board
-                const dropDistance = -((6 - playerRow) * 58);
-                cellElements[column][playerRow].style.setProperty('--drop-distance', `${dropDistance}px`);
-                cellElements[column][playerRow].className = 'cell player dropping';
-                setTimeout(() => cellElements[column][playerRow].classList.remove('dropping'), 400);
-                if (!previousBoard) { previousBoard = Array(7).fill(null).map(() => Array(6).fill(null)); }
-                previousBoard[column][playerRow] = 'X';
-            }
-            setStatus('AI thinking...', true);
-            const thinkingStartTime = Date.now();
-            try {
-                const res = await fetch(`/api/move?column=${column}&depth=${depthSelect.value}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ board: boardState })
-                });
-                const data = await res.json();
-                if (data.error) { setStatus(data.error); if (playerRow !== null) { cellElements[column][playerRow].className = 'cell'; previousBoard[column][playerRow] = null; } return; }
-                const elapsed = Date.now() - thinkingStartTime;
-                if (elapsed < 1200) { await new Promise(r => setTimeout(r, 1200 - elapsed)); }
-                boardState = data.board;
-                updateBoard(data.board);
-                setStatus(data.message);
-                if (data.evaluations) statsEl.textContent = `${data.evaluations.toLocaleString()} positions`;
-                showDebug(data);
-                const winningCells = data.winningCells || data['winning-cells'];
-                if (data.status === 'player_wins') { setStatus('You win! ★'); statusEl.className = 'status win'; endGame(); highlightWinningCells(winningCells); }
-                else if (data.status === 'ai_wins') { setStatus('AI wins...'); statusEl.className = 'status lose'; endGame(); highlightWinningCells(winningCells); }
-                else if (data.status === 'draw') { setStatus('Draw!'); endGame(); }
-                else { statusEl.className = 'status'; }
-            } catch { setStatus('Connection error'); if (playerRow !== null) cellElements[column][playerRow].className = 'cell'; }
-            isProcessing = false;
-            updateColumnSelection();
-        }
-
-        const toggle = document.getElementById('ai-first-toggle');
-        const labelYou = document.getElementById('label-you');
-        const labelAi = document.getElementById('label-ai');
-        toggle.addEventListener('change', () => { labelYou.classList.toggle('active', !toggle.checked); labelAi.classList.toggle('active', toggle.checked); });
-        newGameBtn.addEventListener('click', () => {
-            if (gameActive) { endGame(); clearDebug(); setStatus('Change settings, then click New Game'); return; }
-            newGame(toggle.checked);
-        });
-        
-        // Debug mode
-        
-        // Debug
-        const dbgToggle = document.getElementById('debug-mode');
-        const dbgPanel = document.getElementById('debug-panel');
-        let dbgOn = false;
-        dbgToggle.addEventListener('change', () => {
-            dbgOn = dbgToggle.checked;
-            dbgPanel.style.display = dbgOn ? 'block' : 'none';
-        });
-        function showDebug(data) {
-            if (!dbgOn) return;
-            document.getElementById('dbg-depth').textContent = depthSelect.value;
-            const win = data['immediate-win'] ?? data.immediateWin;
-            const blk = data['immediate-block'] ?? data.immediateBlock;
-            document.getElementById('dbg-win').textContent = win != null ? `Col ${win+1}` : 'None';
-            document.getElementById('dbg-block').textContent = blk != null ? `Col ${blk+1}` : 'None';
-            const scores = data['ai-scores'] || data.aiScores || [];
-            const chose = data['ai-move'] ?? data.aiMove;
-            const els = document.querySelectorAll('#dbg-scores .debug-col .score');
-            const fmt = (n) => {
-                if (n === null) return 'X';
-                if (n === 50000) return 'WIN';
-                if (n === -50000) return 'LOSS';
-                if (n === 49000) return '49k';
-                if (n === -49000) return '-49k';
-                if (Math.abs(n) >= 10000) return (n > 0 ? '' : '-') + Math.round(Math.abs(n)/1000) + 'k';
-                if (Number.isInteger(n)) return String(n);
-                return n.toFixed(1);
-            };
-            scores.forEach(([c, s]) => {
-                if (els[c]) {
-                    if (s === null) { els[c].textContent = 'X'; els[c].className = 'score x'; }
-                    else {
-                        els[c].textContent = fmt(s);
-                        els[c].className = 'score' + (c === chose ? ' best' : s > 0 ? ' pos' : s < 0 ? ' neg' : '');
-                    }
-                }
-            });
-            document.getElementById('dbg-chose').textContent = chose != null ? `Column ${chose+1}` : '-';
-        }
-        function clearDebug() {
-            ['dbg-depth','dbg-win','dbg-block','dbg-chose'].forEach(id => document.getElementById(id).textContent = '-');
-            document.querySelectorAll('#dbg-scores .score').forEach(e => { e.textContent = '-'; e.className = 'score'; });
-        }
-
-        initBoard();
-    </script>
+    <script src="game-client.js"></script>
 </body>
 </html>
