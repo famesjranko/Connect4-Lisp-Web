@@ -10,24 +10,24 @@ This project adds a modern web interface to my original [Connect4-Heuristic-Play
 
 ```
 ┌─────────────────────────────┐
-│     Browser (game UI)       │  ← Holds game token, renders board
+│       Browser (game UI)     │  ← Holds game token, renders board
 └──────────────┬──────────────┘
                │ POST {token, column}
 ┌──────────────▼──────────────┐
-│      Load Balancer          │
+│        Load Balancer        │
 ├─────────┬─────────┬─────────┤
 │ Instance│ Instance│ Instance│  ← Stateless — any instance handles any request
 └────┬────┴────┬────┴────┬────┘
      │         │         │
 ┌────▼─────────▼─────────▼────┐
-│        Redis                │  ← Game state, slot management, TTL expiry
+│            Redis            │  ← Game state, slot management, TTL expiry
 └─────────────────────────────┘
      │         │         │
 ┌────▼─────────▼─────────▼────┐
 │     Lisp AI Engine          │
-│  ├─ minimax.lisp            │  ← α-β pruning + transposition table
-│  ├─ connect-4.lisp          │  ← Game logic + Zobrist hashing
-│  └─ heuristic.lisp          │  ← AI evaluation function
+│       ├─ minimax.lisp       │  ← α-β pruning + transposition table
+│       ├─ connect-4.lisp     │  ← Game logic + Zobrist hashing
+│       └─ heuristic.lisp     │  ← AI evaluation function
 └─────────────────────────────┘
 ```
 
