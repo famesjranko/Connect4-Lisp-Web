@@ -35,7 +35,7 @@ RUN curl -o /tmp/quicklisp.lisp https://beta.quicklisp.org/quicklisp.lisp && \
 
 # Pre-load dependencies to cache them in the image
 RUN sbcl --non-interactive \
-         --eval '(ql:quickload (list :hunchentoot :cl-json :bordeaux-threads :lparallel))' \
+         --eval '(ql:quickload (list :hunchentoot :cl-json :bordeaux-threads :lparallel :cl-redis))' \
          --eval '(quit)'
 
 # Copy application files (as root, then fix permissions)

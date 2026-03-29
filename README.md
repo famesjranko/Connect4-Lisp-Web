@@ -10,14 +10,18 @@ This project adds a modern web interface to my original [Connect4-Heuristic-Play
 
 ```
 ┌─────────────────────────────┐
-│   Browser (stores board)    │  ← Game state lives here
+│     Browser (game UI)       │  ← Holds game token, renders board
 └──────────────┬──────────────┘
-               │ POST {board: [...]}
+               │ POST {token, column}
 ┌──────────────▼──────────────┐
 │      Load Balancer          │
 ├─────────┬─────────┬─────────┤
-│ Instance│ Instance│ Instance│  ← Any instance handles any request
+│ Instance│ Instance│ Instance│  ← Stateless — any instance handles any request
 └────┬────┴────┬────┴────┬────┘
+     │         │         │
+┌────▼─────────▼─────────▼────┐
+│        Redis                 │  ← Game state, slot management, TTL expiry
+└─────────────────────────────┘
      │         │         │
 ┌────▼─────────▼─────────▼────┐
 │     Lisp AI Engine           │
@@ -27,27 +31,25 @@ This project adds a modern web interface to my original [Connect4-Heuristic-Play
 └─────────────────────────────┘
 ```
 
-### Stateless Design
+### Stateless Design with Redis
 
-Unlike traditional session-based game servers:
-- **Client stores board state** in JavaScript
-- **Each request includes full board state** via POST body
-- **No game IDs or server-side storage**
-- **Any instance can handle any request**
+The server itself is stateless — all game state lives in Redis:
 
-This enables true horizontal scaling without sticky sessions.
+- **Server owns the board** — clients send a game token, not the full board
+- **Redis stores game state** as hashes with TTL-based expiry
+- **Game slots** limit concurrent games (default: 4) to prevent resource exhaustion
+- **Atomic slot allocation** via Lua scripting prevents race conditions
+- **Any server instance** can handle any request — true horizontal scaling
+
+This protects against DoS attacks (no unbounded computation from arbitrary board states) while keeping the server fully stateless and horizontally scalable.
 
 ## Quick Start
 
-### Using Docker (Local)
+### Using Docker Compose (recommended)
 
 ```bash
-# Build and run
+# Build and run (includes Redis)
 docker compose up --build
-
-# Or just docker
-docker build -t connect4-lisp .
-docker run -p 8080:8080 connect4-lisp
 ```
 
 Open http://localhost:8080 in your browser.
@@ -57,15 +59,14 @@ Open http://localhost:8080 in your browser.
 1. Push to GitHub
 2. Connect repo to platform
 3. Deploy - auto-detects Dockerfile
-4. Scale to multiple instances ✓
+4. Provision a Redis instance and set `REDIS_HOST`
+5. Scale server instances independently
 
-No sticky sessions or shared state required.
-
-### Running Locally (requires SBCL)
+### Running Locally (requires SBCL + Redis)
 
 ```bash
-# Install SBCL and Quicklisp first, then:
-sbcl --load web-server.lisp
+# Start Redis, then:
+REDIS_HOST=localhost sbcl --load web-server.lisp
 ```
 
 ### Environment Variables
@@ -76,24 +77,34 @@ sbcl --load web-server.lisp
 | `LISP_AI_DEPTH` | 3 | Default AI search depth |
 | `LISP_AI_MAX_DEPTH` | 6 | Maximum allowed search depth |
 | `LISP_AI_THREADS` | 4 | Worker threads for parallel search |
+| `REDIS_HOST` | redis | Redis hostname |
+| `REDIS_PORT` | 6379 | Redis port |
+| `MAX_GAME_SLOTS` | 4 | Maximum concurrent games |
+| `HEARTBEAT_TTL_SECONDS` | 90 | Redis key TTL, refreshed by heartbeats |
+| `INACTIVITY_TTL_SECONDS` | 1800 | Client-side inactivity timeout (resets on moves) |
+| `RATE_LIMIT_REQUESTS` | 10 | Max requests per rate limit window |
+| `RATE_LIMIT_WINDOW` | 10 | Rate limit window in seconds |
 
 ## Features
 
-- **Horizontally scalable** - no server-side session state
-- **Theme picker** - 8 themes from minimal to retro arcade
-- **Keyboard support**: Press 1-7 to drop pieces, arrow keys to select, Enter to confirm
+- **Redis-backed game slots** — server owns board state, clients hold tokens
+- **DoS protection** — capped concurrent games with TTL-based expiry
+- **Horizontally scalable** — stateless servers, all state in Redis
+- **Theme picker** — 8 themes from minimal to retro arcade
+- **Keyboard support** — press 1-7 to drop pieces, arrow keys to select, Enter to confirm
 - **Adjustable AI difficulty** (depth 1-8)
-- **Debug mode** - see AI's move analysis and scores
+- **Debug mode** — see AI's move analysis and scores
 - **Winning line highlighting** when game ends
+- **Slot availability indicator** — live game count with manual refresh
 - **Non-root Docker** container for security
-- **Theme persistence** - your preference is saved to localStorage
 
 ## Themes
 
-The UI supports 8 unique themes, each in its own standalone HTML file:
+The UI supports 8 unique themes, each with its own HTML/CSS. Game logic is shared via `game-client.js`:
 
 ```
 static/
+├── game-client.js  # Shared game logic (token-based API)
 ├── index.html      # Redirects to modern.html
 ├── modern.html     # Clean, minimal dark theme
 ├── arcade.html     # Retro arcade with glows and 3D board
@@ -105,31 +116,26 @@ static/
 └── hacker.html     # Matrix digital rain effect
 ```
 
-Add new themes by creating additional HTML files in `static/`. Each theme is fully self-contained.
+Add new themes by creating additional HTML files in `static/`. Each theme contains only HTML and CSS — all game logic lives in `game-client.js`.
 
 ## Project Structure
 
 ```
 connect4-lisp/
-├── src/                     # Original Lisp files
-│   ├── minimax.lisp         # Minimax algorithm with α-β pruning
-│   ├── connect-4.lisp       # Game board, moves, win detection
-│   └── heuristic.lisp       # AI heuristic evaluation
-├── static/                  # 8 theme files (see Themes section)
+├── src/
+│   ├── connect-4.lisp       # Game board, moves, win detection, Zobrist hashing
+│   ├── heuristic.lisp       # AI heuristic evaluation
+│   ├── minimax.lisp         # Minimax with α-β pruning, transposition table, parallel search
+│   ├── redis.lisp           # Redis connection, Lua scripts, slot management
+│   └── game-store.lisp      # Game lifecycle (create/load/save/end), validation, conditions
+├── static/
+│   ├── game-client.js       # Shared frontend game logic
 │   ├── index.html           # Redirect to default theme
-│   ├── modern.html          # Modern theme
-│   ├── arcade.html          # Arcade theme
-│   ├── terminal.html        # Terminal theme
-│   ├── neon.html            # Neon theme
-│   ├── paper.html           # Paper theme
-│   ├── midnight.html        # Midnight theme
-│   ├── sunset.html          # Sunset theme
-│   └── hacker.html          # Hacker theme
-├── images/
-│   └── screenshot-1.jpg     # Game screenshot
+│   └── *.html               # Theme files (8 themes)
 ├── web-server.lisp          # HTTP API layer (Hunchentoot)
 ├── Dockerfile
-├── docker-compose.yml
+├── docker-compose.yml       # App + Redis
+├── test-game-slots.sh       # Integration test suite
 └── README.md
 ```
 
@@ -137,54 +143,98 @@ connect4-lisp/
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/new-game` | GET | Get empty board (player first) |
-| `/api/new-game-ai-first?depth=N` | GET | Get board with AI's first move |
-| `/api/move?column=N&depth=D` | POST | Make a move (board in POST body) |
-| `/api/debug?depth=N` | POST | Evaluate board without moving |
-| `/api/health` | GET | Health check |
+| `/api/new-game` | POST | Create a new game (returns token) |
+| `/api/move` | POST | Make a move (token + column) |
+| `/api/game` | DELETE/POST | Resign / end a game |
+| `/api/debug` | POST | Evaluate board without moving |
+| `/api/health` | GET | Health check with Redis status and slot count |
 
-### Request Format
+### Create Game
 
 ```javascript
-// POST /api/move?column=3&depth=4
+// POST /api/new-game
 // Content-Type: application/json
 {
-  "board": [
-    [null, null, null, null, null, null],  // Column 0 (bottom to top)
-    [null, null, null, null, null, null],  // Column 1
-    [null, null, null, null, null, null],  // Column 2
-    ["X", null, null, null, null, null],   // Column 3 - player piece at bottom
-    ["O", null, null, null, null, null],   // Column 4 - AI piece at bottom
-    [null, null, null, null, null, null],  // Column 5
-    [null, null, null, null, null, null]   // Column 6
-  ]
+  "depth": 4,
+  "aiFirst": false
 }
 ```
 
-### Response Format
+```json
+// Response 200
+{
+  "token": "29e48712-2593-4884-83e0-03a8f15246e1",
+  "board": [[null,null,...], ...],
+  "status": "ongoing",
+  "turn": "x",
+  "message": "Your turn!"
+}
+
+// Response 503 (slots full)
+{
+  "error": "slots_full",
+  "message": "All game slots are in use. Try again shortly."
+}
+```
+
+### Make Move
+
+```javascript
+// POST /api/move
+// Content-Type: application/json
+{
+  "token": "29e48712-2593-4884-83e0-03a8f15246e1",
+  "column": 3
+}
+```
 
 ```json
+// Response 200
 {
-  "board": [[null,null,null,null,null,null], ...],
+  "board": [[null,null,...], ...],
   "status": "ongoing",
-  "aiMove": 3,
+  "aiMove": 2,
   "aiScores": [[0, 12], [1, 8], [2, 15], ...],
   "evaluations": 1234,
   "immediateWin": null,
-  "immediateBlock": 2,
-  "winningCells": [[3,0], [3,1], [3,2], [3,3]],
-  "message": "Your turn"
+  "immediateBlock": 4,
+  "winningCells": null,
+  "message": "Your turn!"
 }
 ```
 
-### Health Check Response
+### Error Responses
+
+| Status | Error Code | When |
+|--------|-----------|------|
+| 400 | `invalid_column` | Column not 0-6 |
+| 400 | `column_full` | Column has no space |
+| 404 | `game_not_found` | Invalid or expired token |
+| 405 | `method_not_allowed` | Wrong HTTP method |
+| 409 | `game_over` | Move on finished game |
+| 429 | `rate_limited` | Too many requests (per-IP) |
+| 503 | `slots_full` | All game slots occupied |
+
+### Health Check
 
 ```json
 {
   "status": "ok",
-  "version": "stateless"
+  "version": "1.0",
+  "redis": "connected",
+  "activeGames": 2,
+  "maxGames": 4
 }
 ```
+
+## Redis Schema
+
+| Key | Type | TTL | Description |
+|-----|------|-----|-------------|
+| `game:{token}` | Hash | 90s (heartbeat) / 60s (ended) | Board, turn, status, depth, move count |
+| `games:active` | Set | none | Tokens of active games (max 4) |
+
+Slot allocation uses a Lua script for atomicity — cleans stale entries, checks capacity, and claims the slot in a single Redis operation.
 
 ## AI Configuration
 
@@ -215,27 +265,42 @@ The heuristic evaluates:
 
 ### Keyboard
 - **1-7**: Drop piece in column 1-7
-- **←/→**: Select column
+- **Left/Right**: Select column
 - **Enter/Space**: Drop piece in selected column
 - **N**: Start new game
+
+## Testing
+
+```bash
+# Run the integration test suite (requires running services)
+docker compose up -d
+bash test-game-slots.sh
+```
+
+Tests cover: game creation, moves, slot limits, resign, error handling, token validation, and multi-move sequences.
 
 ## Technical Details
 
 - **Lisp Implementation**: SBCL (Steel Bank Common Lisp)
 - **Web Server**: Hunchentoot
+- **Game State**: Redis 7 (Alpine)
 - **JSON Handling**: cl-json
+- **Redis Client**: cl-redis
 - **Parallelism**: lparallel
 - **Frontend**: Vanilla HTML/CSS/JS (no frameworks)
 - **Container**: Debian Bookworm slim base (non-root)
 
-## Security & Performance
+## Security
 
-- Stateless design eliminates session-related vulnerabilities
-- No server-side memory accumulation
-- Per-request transposition tables for thread-safe concurrent handling
-- Non-root container execution
-- Cached DOM references in frontend
-- Input validation on all endpoints (board shape, column range, depth clamping)
+- **Per-IP rate limiting** — configurable request throttling (default: 10 req/10s) with 429 responses
+- **Game slot limits** prevent DoS via resource exhaustion
+- **Server-authoritative board** — clients cannot submit arbitrary board states
+- **Token-based identity** — UUID v4 tokens with length validation
+- **Dual TTL expiry** — heartbeat TTL (90s) catches closed tabs; inactivity TTL (30 min) catches idle games
+- **Atomic slot allocation** — Lua scripting prevents race conditions
+- **Tab close cleanup** — `sendBeacon` frees slots on browser exit
+- **Non-root container** execution
+- **Input validation** on all endpoints (token format, column range, depth clamping)
 
 ## Credits
 
