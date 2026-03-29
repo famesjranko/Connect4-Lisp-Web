@@ -1,4 +1,4 @@
-# Connect-4 Lisp Heuristic Player - Web Dashboard
+# Connect-4 AI Lisp Heuristic Player - Web Dashboard
 
 <img src="images/screenshot-1.jpg" alt="Connect 4 Screenshot" width="600">
 
