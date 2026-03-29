@@ -10,6 +10,10 @@ let isProcessing = false;
 let selectedColumn = 3;
 let previousBoard = null;
 let gameToken = null;
+let gameTtlSeconds = 1800;
+let expiryTimer = null;
+let warningTimer = null;
+let heartbeatInterval = null;
 
 // ---------------------------------------------------------------------------
 // DOM references
@@ -39,6 +43,8 @@ async function refreshSlotCount() {
         const max = data.maxGames ?? data['max-games'] ?? 4;
         slotsEl.textContent = `${active}/${max} slots`;
         slotsEl.classList.toggle('slots-full', active >= max);
+        const ttl = data.inactivityTtl ?? data['inactivity-ttl'];
+        if (ttl) gameTtlSeconds = ttl;
     } catch {
         slotsEl.textContent = '--/-- slots';
     } finally {
@@ -47,6 +53,54 @@ async function refreshSlotCount() {
 }
 
 slotsRefreshBtn.addEventListener('click', refreshSlotCount);
+
+// ---------------------------------------------------------------------------
+// Inactivity expiry timers
+// ---------------------------------------------------------------------------
+
+function resetExpiryTimers() {
+    clearTimeout(expiryTimer);
+    clearTimeout(warningTimer);
+    if (!gameActive || !gameToken) return;
+
+    const expiryAt = gameTtlSeconds * 1000;
+    const warningAt = expiryAt * 0.8; // warn at 80% through TTL
+    const remaining = Math.ceil((expiryAt - warningAt) / 1000);
+
+    warningTimer = setTimeout(() => {
+        if (gameActive) setStatus(`Game expires in ${remaining}s — make a move!`);
+    }, warningAt);
+
+    expiryTimer = setTimeout(() => {
+        if (gameActive) {
+            setStatus('Game expired due to inactivity.');
+            gameToken = null;
+            endGame();
+        }
+    }, expiryAt);
+}
+
+function clearExpiryTimers() {
+    clearTimeout(expiryTimer);
+    clearTimeout(warningTimer);
+    clearInterval(heartbeatInterval);
+    expiryTimer = null;
+    warningTimer = null;
+    heartbeatInterval = null;
+}
+
+function startHeartbeat() {
+    clearInterval(heartbeatInterval);
+    heartbeatInterval = setInterval(() => {
+        if (gameActive && gameToken) {
+            fetch('/api/heartbeat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token: gameToken })
+            }).catch(() => {});
+        }
+    }, 30000); // every 30 seconds
+}
 
 // ---------------------------------------------------------------------------
 // Status helpers
@@ -214,6 +268,8 @@ async function newGame(aiFirst = false) {
         statsEl.textContent = '';
         clearDebug();
         refreshSlotCount();
+        resetExpiryTimers();
+        startHeartbeat();
         if (aiFirst && data) showDebug(data);
     } catch {
         setStatus('Connection error');
@@ -224,6 +280,7 @@ function endGame() {
     gameActive = false;
     gameToken = null;
     sessionStorage.removeItem('gameToken');
+    clearExpiryTimers();
     newGameBtn.textContent = 'New Game';
     newGameBtn.classList.remove('game-active');
     settingsRow.classList.remove('locked');
@@ -338,6 +395,7 @@ async function makeMove(column) {
         } else {
             statusEl.className = 'status';
             refreshSlotCount();
+            resetExpiryTimers();
         }
     } catch {
         setStatus('Connection error');

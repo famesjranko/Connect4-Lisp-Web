@@ -201,7 +201,9 @@
        (:version . "1.0")
        (:redis . ,(if redis-ok "connected" "disconnected"))
        (:active-games . ,(or active 0))
-       (:max-games . ,*max-game-slots*)))))
+       (:max-games . ,*max-game-slots*)
+       (:heartbeat-ttl . ,*heartbeat-ttl-seconds*)
+       (:inactivity-ttl . ,*inactivity-ttl-seconds*)))))
 
 ;;; Create a new game (POST only)
 (hunchentoot:define-easy-handler (api-new-game :uri "/api/new-game") ()
@@ -352,6 +354,20 @@
       (cl-json:encode-json-to-string
        '((:message . "Game ended."))))))
 
+;;; Heartbeat — keep a game alive while the tab is open
+(hunchentoot:define-easy-handler (api-heartbeat :uri "/api/heartbeat") ()
+  (setf (hunchentoot:content-type*) "application/json")
+  (with-game-error-handling
+    (let* ((json-data (parse-json-body))
+           (token     (cdr (assoc :token json-data))))
+      (unless (and token (stringp token) (<= 1 (length token) 36))
+        (error 'game-not-found))
+      ;; Verify game exists, then refresh TTL
+      (load-game token)
+      (redis-refresh-game-ttl token)
+      (cl-json:encode-json-to-string
+       '((:status . "ok"))))))
+
 ;;; Debug endpoint — analyse a game's current board
 (hunchentoot:define-easy-handler (api-debug :uri "/api/debug") ()
   (setf (hunchentoot:content-type*) "application/json")
@@ -390,8 +406,9 @@
                                :document-root #p"/app/static/")))
     (hunchentoot:start server)
     (format t "~%Connect-4 Server v1.0 running on http://localhost:~a~%" port)
-    (format t "Redis: ~a:~a | Slots: ~a | TTL: ~as~%"
-            *redis-host* *redis-port* *max-game-slots* *game-ttl-seconds*)
+    (format t "Redis: ~a:~a | Slots: ~a | Heartbeat: ~as | Inactivity: ~as~%"
+            *redis-host* *redis-port* *max-game-slots*
+            *heartbeat-ttl-seconds* *inactivity-ttl-seconds*)
     (force-output)
     server))
 

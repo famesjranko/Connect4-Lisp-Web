@@ -5,6 +5,10 @@ PASS=0
 FAIL=0
 TOKENS=()
 
+# Clean up any stale games from previous runs
+docker compose exec -T redis redis-cli DEL games:active > /dev/null 2>&1
+docker compose exec -T redis redis-cli KEYS "game:*" | xargs -r docker compose exec -T redis redis-cli DEL > /dev/null 2>&1
+
 # Helpers
 red()   { echo -e "\033[31m$1\033[0m"; }
 green() { echo -e "\033[32m$1\033[0m"; }
@@ -176,11 +180,29 @@ CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "Content-Type: applicat
 assert_eq "reject long token" "404" "$CODE"
 
 # =========================================================================
+bold "=== Test 19: Heartbeat endpoint ==="
+# Create a game, then heartbeat it
+RESP=$(curl -s -X POST -H "Content-Type: application/json" \
+    -d '{"depth":1}' "$BASE/api/new-game")
+HB_TOKEN=$(echo "$RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
+RESP=$(curl -s -X POST -H "Content-Type: application/json" \
+    -d "{\"token\":\"$HB_TOKEN\"}" "$BASE/api/heartbeat")
+assert_contains "heartbeat returns ok" '"status":"ok"' "$RESP"
+# Clean up
+curl -s -X DELETE -H "Content-Type: application/json" \
+    -d "{\"token\":\"$HB_TOKEN\"}" "$BASE/api/game" > /dev/null
+
+# =========================================================================
+bold "=== Test 20: Heartbeat on invalid token returns 404 ==="
+CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "Content-Type: application/json" \
+    -d '{"token":"nonexistent-fake-token"}' "$BASE/api/heartbeat")
+assert_eq "404 for heartbeat on invalid token" "404" "$CODE"
+
 # Wait for rate limit window to reset
 sleep 11
 
 # =========================================================================
-bold "=== Test 19: Play a full sequence of moves ==="
+bold "=== Test 21: Play a full sequence of moves ==="
 # Create fresh game
 RESP=$(curl -s -X POST -H "Content-Type: application/json" \
     -d '{"depth":1}' "$BASE/api/new-game")
@@ -202,7 +224,7 @@ done
 assert_contains "game progressed" '"status"' "$RESP"
 
 # =========================================================================
-bold "=== Test 20: Rate limiting (429) ==="
+bold "=== Test 22: Rate limiting (429) ==="
 # Rapid-fire requests to trigger rate limit (limit is 10/10s)
 for i in $(seq 1 12); do
     curl -s -o /dev/null -X POST -H "Content-Type: application/json" \
@@ -215,7 +237,7 @@ assert_eq "429 after rate limit exceeded" "429" "$CODE"
 sleep 11
 
 # =========================================================================
-bold "=== Test 21: Expired token after resign ==="
+bold "=== Test 23: Expired token after resign ==="
 # TOKEN3 was resigned earlier
 CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "Content-Type: application/json" \
     -d "{\"token\":\"$TOKEN3\",\"column\":3}" "$BASE/api/move")

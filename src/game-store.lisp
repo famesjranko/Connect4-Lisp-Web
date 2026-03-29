@@ -132,7 +132,7 @@
                              :move-count "0"
                              :depth  (princ-to-string depth)
                              :created-at (princ-to-string now))
-                       *game-ttl-seconds*)
+                       *heartbeat-ttl-seconds*)
       token)))
 
 (defun load-game (token)
@@ -173,7 +173,7 @@
                          :turn       (if (eq turn 'x) "x" "o")
                          :status     status
                          :move-count (princ-to-string move-count))
-                   *game-ttl-seconds*))
+                   *heartbeat-ttl-seconds*))
 
 (defun end-game (token status board)
   "Mark a game as ended: free the slot, save terminal state with short TTL."

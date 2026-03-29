@@ -24,7 +24,8 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - MAX_GAME_SLOTS=4
-      - GAME_TTL_SECONDS=300
+      - HEARTBEAT_TTL_SECONDS=90
+      - INACTIVITY_TTL_SECONDS=1800
       - RATE_LIMIT_REQUESTS=10
       - RATE_LIMIT_WINDOW=10
     # Uncomment for development - allows editing static files without rebuilding

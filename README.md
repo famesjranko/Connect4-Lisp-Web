@@ -80,7 +80,8 @@ REDIS_HOST=localhost sbcl --load web-server.lisp
 | `REDIS_HOST` | redis | Redis hostname |
 | `REDIS_PORT` | 6379 | Redis port |
 | `MAX_GAME_SLOTS` | 4 | Maximum concurrent games |
-| `GAME_TTL_SECONDS` | 300 | Game expiry after inactivity (seconds) |
+| `HEARTBEAT_TTL_SECONDS` | 90 | Redis key TTL, refreshed by heartbeats |
+| `INACTIVITY_TTL_SECONDS` | 1800 | Client-side inactivity timeout (resets on moves) |
 | `RATE_LIMIT_REQUESTS` | 10 | Max requests per rate limit window |
 | `RATE_LIMIT_WINDOW` | 10 | Rate limit window in seconds |
 
@@ -230,7 +231,7 @@ connect4-lisp/
 
 | Key | Type | TTL | Description |
 |-----|------|-----|-------------|
-| `game:{token}` | Hash | 300s (active) / 60s (ended) | Board, turn, status, depth, move count |
+| `game:{token}` | Hash | 90s (heartbeat) / 60s (ended) | Board, turn, status, depth, move count |
 | `games:active` | Set | none | Tokens of active games (max 4) |
 
 Slot allocation uses a Lua script for atomicity — cleans stale entries, checks capacity, and claims the slot in a single Redis operation.
@@ -295,7 +296,7 @@ Tests cover: game creation, moves, slot limits, resign, error handling, token va
 - **Game slot limits** prevent DoS via resource exhaustion
 - **Server-authoritative board** — clients cannot submit arbitrary board states
 - **Token-based identity** — UUID v4 tokens with length validation
-- **TTL-based expiry** — abandoned games auto-clean after 5 minutes
+- **Dual TTL expiry** — heartbeat TTL (90s) catches closed tabs; inactivity TTL (30 min) catches idle games
 - **Atomic slot allocation** — Lua scripting prevents race conditions
 - **Tab close cleanup** — `sendBeacon` frees slots on browser exit
 - **Non-root container** execution

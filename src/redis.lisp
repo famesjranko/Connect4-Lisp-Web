@@ -19,10 +19,19 @@
         (and s (parse-integer s :junk-allowed t)))
       4))
 
-(defvar *game-ttl-seconds*
-  (or (let ((t-val (uiop:getenv "GAME_TTL_SECONDS")))
+(defvar *heartbeat-ttl-seconds*
+  (or (let ((t-val (uiop:getenv "HEARTBEAT_TTL_SECONDS")))
         (and t-val (parse-integer t-val :junk-allowed t)))
-      300))
+      90)
+  "Redis key TTL in seconds. Refreshed by heartbeats every ~30s.
+   If the tab closes and sendBeacon fails, the game expires after this.")
+
+(defvar *inactivity-ttl-seconds*
+  (or (let ((t-val (uiop:getenv "INACTIVITY_TTL_SECONDS")))
+        (and t-val (parse-integer t-val :junk-allowed t)))
+      1800)
+  "Client-side inactivity timeout in seconds. Resets on each action
+   (move, new game). Enforced by the browser, not Redis.")
 
 (defvar *game-ended-ttl-seconds* 60
   "TTL for game keys after the game has ended. Allows clients to
@@ -119,7 +128,7 @@ return 1")
                             (princ-to-string *max-game-slots*) ; ARGV[1]
                             token                      ; ARGV[2]
                             +game-key-prefix+          ; ARGV[3]
-                            (princ-to-string *game-ttl-seconds*)))) ; ARGV[4]
+                            (princ-to-string *heartbeat-ttl-seconds*)))) ; ARGV[4]
       ;; cl-redis may return integer 1 or T depending on version
       (or (eql result 1) (eql result t)))))
 
@@ -176,7 +185,7 @@ return 1")
 
 (defun redis-refresh-game-ttl (token)
   "Refresh the active-game TTL on TOKEN's key."
-  (redis-set-ttl token *game-ttl-seconds*))
+  (redis-set-ttl token *heartbeat-ttl-seconds*))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Rate limiting
