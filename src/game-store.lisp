@@ -48,6 +48,12 @@
    :http-status 409
    :message "It is not your turn."))
 
+(define-condition rate-limited-error (game-error) ()
+  (:default-initargs
+   :code "rate_limited"
+   :http-status 429
+   :message "Too many requests. Please slow down."))
+
 ;;; ---------------------------------------------------------------------------
 ;;; Game status constants
 ;;; ---------------------------------------------------------------------------

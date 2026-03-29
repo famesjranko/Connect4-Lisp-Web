@@ -148,6 +148,9 @@
   `(handler-case (progn ,@body)
      (game-error (e)
        (setf (hunchentoot:return-code*) (http-status e))
+       (when (= (http-status e) 429)
+         (setf (hunchentoot:header-out :retry-after)
+               (princ-to-string *rate-limit-window-seconds*)))
        (cl-json:encode-json-to-string
         `((:error . ,(error-code e))
           (:message . ,(user-message e)))))
@@ -157,6 +160,20 @@
        (cl-json:encode-json-to-string
         '((:error . "internal_error")
           (:message . "An unexpected error occurred."))))))
+
+;;; ---------------------------------------------------------------------------
+;;; Rate limiting
+;;; ---------------------------------------------------------------------------
+
+(defun client-ip ()
+  "Get the client's IP address, respecting X-Forwarded-For behind a proxy."
+  (or (hunchentoot:header-in* :x-forwarded-for)
+      (hunchentoot:remote-addr*)))
+
+(defun enforce-rate-limit ()
+  "Signal RATE-LIMITED-ERROR if the client has exceeded the request limit."
+  (unless (rate-limit-check (client-ip))
+    (error 'rate-limited-error)))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Request body parsing
@@ -196,6 +213,7 @@
        '((:error . "method_not_allowed")
          (:message . "Use POST method.")))))
   (with-game-error-handling
+    (enforce-rate-limit)
     (let* ((json-data (parse-json-body))
            (raw-depth (cdr (assoc :depth json-data)))
            (ai-first  (cdr (assoc :ai-first json-data)))
@@ -239,6 +257,7 @@
 (hunchentoot:define-easy-handler (api-move :uri "/api/move") ()
   (setf (hunchentoot:content-type*) "application/json")
   (with-game-error-handling
+    (enforce-rate-limit)
     (let* ((json-data (parse-json-body))
            (token     (cdr (assoc :token json-data)))
            (col       (cdr (assoc :column json-data))))

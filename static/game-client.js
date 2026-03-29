@@ -191,6 +191,12 @@ async function newGame(aiFirst = false) {
             return;
         }
 
+        if (res.status === 429) {
+            const data = await res.json();
+            setStatus(data.message || 'Too many requests — please slow down');
+            return;
+        }
+
         const data = await res.json();
         if (data.error) { setStatus(data.message || data.error); return; }
 
@@ -274,6 +280,18 @@ async function makeMove(column) {
             setStatus('Game expired. Start a new game.');
             gameToken = null;
             endGame(); // endGame already calls refreshSlotCount
+            return;
+        }
+
+        // Handle rate limiting
+        if (res.status === 429) {
+            const data = await res.json();
+            setStatus(data.message || 'Too many requests — please slow down');
+            if (playerRow !== null) {
+                cellElements[column][playerRow].className = 'cell';
+                previousBoard[column][playerRow] = null;
+            }
+            isProcessing = false;
             return;
         }
 

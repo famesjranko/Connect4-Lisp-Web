@@ -81,6 +81,8 @@ REDIS_HOST=localhost sbcl --load web-server.lisp
 | `REDIS_PORT` | 6379 | Redis port |
 | `MAX_GAME_SLOTS` | 4 | Maximum concurrent games |
 | `GAME_TTL_SECONDS` | 300 | Game expiry after inactivity (seconds) |
+| `RATE_LIMIT_REQUESTS` | 10 | Max requests per rate limit window |
+| `RATE_LIMIT_WINDOW` | 10 | Rate limit window in seconds |
 
 ## Features
 
@@ -209,6 +211,7 @@ connect4-lisp/
 | 404 | `game_not_found` | Invalid or expired token |
 | 405 | `method_not_allowed` | Wrong HTTP method |
 | 409 | `game_over` | Move on finished game |
+| 429 | `rate_limited` | Too many requests (per-IP) |
 | 503 | `slots_full` | All game slots occupied |
 
 ### Health Check
@@ -288,6 +291,7 @@ Tests cover: game creation, moves, slot limits, resign, error handling, token va
 
 ## Security
 
+- **Per-IP rate limiting** — configurable request throttling (default: 10 req/10s) with 429 responses
 - **Game slot limits** prevent DoS via resource exhaustion
 - **Server-authoritative board** — clients cannot submit arbitrary board states
 - **Token-based identity** — UUID v4 tokens with length validation

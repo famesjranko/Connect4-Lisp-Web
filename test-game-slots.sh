@@ -135,6 +135,10 @@ RESP=$(curl -s "$BASE/api/health")
 assert_contains "4 active games" '"activeGames":4' "$RESP"
 
 # =========================================================================
+# Wait for rate limit window to reset after rapid slot-filling
+sleep 11
+
+# =========================================================================
 bold "=== Test 14: Resign a game (DELETE /api/game) ==="
 RESP=$(curl -s -X DELETE -H "Content-Type: application/json" \
     -d "{\"token\":\"$TOKEN3\"}" "$BASE/api/game")
@@ -172,6 +176,10 @@ CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "Content-Type: applicat
 assert_eq "reject long token" "404" "$CODE"
 
 # =========================================================================
+# Wait for rate limit window to reset
+sleep 11
+
+# =========================================================================
 bold "=== Test 19: Play a full sequence of moves ==="
 # Create fresh game
 RESP=$(curl -s -X POST -H "Content-Type: application/json" \
@@ -194,7 +202,20 @@ done
 assert_contains "game progressed" '"status"' "$RESP"
 
 # =========================================================================
-bold "=== Test 20: Expired token after resign ==="
+bold "=== Test 20: Rate limiting (429) ==="
+# Rapid-fire requests to trigger rate limit (limit is 10/10s)
+for i in $(seq 1 12); do
+    curl -s -o /dev/null -X POST -H "Content-Type: application/json" \
+        -d '{"depth":1}' "$BASE/api/new-game"
+done
+CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "Content-Type: application/json" \
+    -d '{"depth":1}' "$BASE/api/new-game")
+assert_eq "429 after rate limit exceeded" "429" "$CODE"
+# Wait for window to reset
+sleep 11
+
+# =========================================================================
+bold "=== Test 21: Expired token after resign ==="
 # TOKEN3 was resigned earlier
 CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "Content-Type: application/json" \
     -d "{\"token\":\"$TOKEN3\",\"column\":3}" "$BASE/api/move")

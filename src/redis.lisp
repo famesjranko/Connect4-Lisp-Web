@@ -28,6 +28,18 @@
   "TTL for game keys after the game has ended. Allows clients to
    fetch the final board state briefly before cleanup.")
 
+(defvar *rate-limit-requests*
+  (or (let ((r (uiop:getenv "RATE_LIMIT_REQUESTS")))
+        (and r (parse-integer r :junk-allowed t)))
+      10)
+  "Maximum requests allowed per rate limit window.")
+
+(defvar *rate-limit-window-seconds*
+  (or (let ((w (uiop:getenv "RATE_LIMIT_WINDOW")))
+        (and w (parse-integer w :junk-allowed t)))
+      10)
+  "Rate limit window duration in seconds.")
+
 ;;; ---------------------------------------------------------------------------
 ;;; Key schema
 ;;; ---------------------------------------------------------------------------
@@ -165,3 +177,40 @@ return 1")
 (defun redis-refresh-game-ttl (token)
   "Refresh the active-game TTL on TOKEN's key."
   (redis-set-ttl token *game-ttl-seconds*))
+
+;;; ---------------------------------------------------------------------------
+;;; Rate limiting
+;;; ---------------------------------------------------------------------------
+;;; Fixed-window counter per IP. Atomic via Lua script:
+;;;   - Increments counter for the IP key
+;;;   - Sets TTL on first request in window
+;;;   - Returns current count (caller checks against limit)
+
+(defvar +rate-key-prefix+ "rate:"
+  "Redis key prefix for rate limit counters.")
+
+(defparameter *rate-limit-script*
+  "local key = KEYS[1]
+local limit = tonumber(ARGV[1])
+local window = tonumber(ARGV[2])
+local current = redis.call('INCR', key)
+if current == 1 then
+  redis.call('EXPIRE', key, window)
+end
+if current > limit then
+  return 0
+end
+return 1"
+  "Lua script for atomic rate limit check.
+   Returns 1 if allowed, 0 if rate limited.")
+
+(defun rate-limit-check (ip)
+  "Check whether IP is within rate limits. Returns T if allowed, NIL if limited."
+  (with-redis
+    (let* ((key (concatenate 'string +rate-key-prefix+ ip))
+           (result (red:eval *rate-limit-script*
+                             1      ; number of KEYS
+                             key    ; KEYS[1]
+                             (princ-to-string *rate-limit-requests*)      ; ARGV[1]
+                             (princ-to-string *rate-limit-window-seconds*)))) ; ARGV[2]
+      (or (eql result 1) (eql result t)))))
