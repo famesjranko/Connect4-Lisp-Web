@@ -466,6 +466,7 @@ function showDebug(data) {
         if (n === 49000) return '49k';
         if (n === -49000) return '-49k';
         if (Math.abs(n) >= 10000) return (n > 0 ? '' : '-') + Math.round(Math.abs(n) / 1000) + 'k';
+        if (Math.abs(n) >= 100) return String(Math.round(n));
         if (Number.isInteger(n)) return String(n);
         return n.toFixed(1);
     };
