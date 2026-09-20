@@ -9,27 +9,33 @@ This project adds a modern web interface to my original [Connect4-Heuristic-Play
 ### Architecture
 
 ```
-┌─────────────────────────────┐
-│       Browser (game UI)     │  ← Holds game token, renders board
-└──────────────┬──────────────┘
-               │ POST {token, column}
-┌──────────────▼──────────────┐
-│        Load Balancer        │
-├─────────┬─────────┬─────────┤
-│ Instance│ Instance│ Instance│  ← Stateless — any instance handles any request
-└────┬────┴────┬────┴────┬────┘
-     │         │         │
-┌────▼─────────▼─────────▼────┐
-│            Redis            │  ← Game state, slot management, TTL expiry
-└─────────────────────────────┘
-     │         │         │
-┌────▼─────────▼─────────▼────┐
-│     Lisp AI Engine          │
-│       ├─ minimax.lisp       │  ← α-β pruning + transposition table
-│       ├─ connect-4.lisp     │  ← Game logic + Zobrist hashing
-│       └─ heuristic.lisp     │  ← AI evaluation function
-└─────────────────────────────┘
+┌───────────────────────────────────────────────┐
+│ Browser                                       │
+│ HTML / CSS / JavaScript (game-client.js)      │
+│ Holds game token, renders board               │
+└──────────────────────┬────────────────────────┘
+                       │ HTTP / JSON
+                       │ new-game · move · heartbeat · end game
+                       │ debug · health
+┌──────────────────────▼────────────────────────┐
+│ SBCL application (web-server.lisp)            │
+│ Hunchentoot API                               │
+│  ├─ request validation + rate limiting        │
+│  ├─ game lifecycle (game-store.lisp)          │
+│  ├─ board + win detection (connect-4.lisp)    │
+│  ├─ heuristic evaluation (heuristic.lisp)     │
+│  └─ minimax α-β + transposition table         │
+│     + lparallel root workers (minimax.lisp)   │
+└──────────────────────┬────────────────────────┘
+                       │ load / save game state
+┌──────────────────────▼────────────────────────┐
+│ Redis                                         │
+│ game hashes · active-game slots · TTLs        │
+│ rate-limit counters                           │
+└───────────────────────────────────────────────┘
 ```
+
+The AI engine runs inside each application instance; Redis is only the shared store. Additional application instances can share one Redis behind a load balancer, though the included Docker Compose setup runs a single application instance alongside Redis.
 
 ### Stateless Design with Redis
 
@@ -38,8 +44,8 @@ The server itself is stateless — all game state lives in Redis:
 - **Server owns the board** — clients send a game token, not the full board
 - **Redis stores game state** as hashes with TTL-based expiry
 - **Game slots** limit concurrent games (default: 4) to prevent resource exhaustion
-- **Atomic slot allocation** via Lua scripting prevents race conditions
-- **Any server instance** can handle any request — true horizontal scaling
+- **Atomic slot allocation** and **rate limiting** via Lua scripting prevent races on those operations
+- **Any server instance** can serve any token, since state is loaded from Redis per request. A move is load → validate → search → save with no per-game lock, so concurrent moves on the same token are not serialised.
 
 This protects against DoS attacks (no unbounded computation from arbitrary board states) while keeping the server fully stateless and horizontally scalable.
 
