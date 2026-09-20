@@ -150,24 +150,23 @@
 ;; then search remaining moves in parallel. Each thread gets its own TT.
 
 (defun minimax-a-b-parallel (pos player)
-  "Parallel root-level alpha-beta. Returns (values best-board best-col best-score)."
+  "Parallel root-level alpha-beta. Returns (values best-board best-col best-score).
+   Evaluation counts from the sequential first move and every worker are
+   added to the caller's binding of *static-evaluations*."
   (let* ((columns (movegen pos player))
-         (hash (board-hash pos))
-         (total-evals 0))
+         (hash (board-hash pos)))
     (when (null columns)
       (return-from minimax-a-b-parallel (values nil nil 0)))
     ;; Search first move sequentially to establish alpha-beta bound
     (let* ((first-col (car columns))
            (first-row (get-next-blank pos first-col))
            (first-board (make-move pos player first-col))
-           (first-hash (hash-after-move hash first-col first-row player))
-           (*static-evaluations* 0))
+           (first-hash (hash-after-move hash first-col first-row player)))
       (tt-clear)
       (let ((best-score (- (minimax-a-b-1 first-board 1 (opposite player)
                                           99999 -99999 nil first-hash)))
             (best-col first-col)
             (best-board first-board))
-        (incf total-evals *static-evaluations*)
         ;; Search remaining moves in parallel
         (when (cdr columns)
           (let ((futures
@@ -187,12 +186,11 @@
             (dolist (f futures)
               (let ((result (lparallel:force f)))
                 (destructuring-bind (col board score evals) result
-                  (incf total-evals evals)
+                  (incf *static-evaluations* evals)
                   (when (> score best-score)
                     (setq best-score score)
                     (setq best-col col)
                     (setq best-board board)))))))
-        (setq *static-evaluations* total-evals)
         (values best-board best-col best-score)))))
 
 ;; Function PLAY allows you to play a game against the computer. Call (play)
